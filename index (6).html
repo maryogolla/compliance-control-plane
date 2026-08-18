@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operations Control Plane — Design Exercise</title>
+<style>
+:root{--void:#0b0e14;--panel:#12161f;--stroke:#232b3a;--lit:#2d3f56;--hi:#c9d4e4;--txt:#8b97ab;--dim:#5f6b80;--ok:#5dcaa5;--warn:#efaa3c;--crit:#e8615f;--mono:ui-monospace,Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--txt);font-family:var(--sans);font-size:13px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1200px;margin:0 auto;padding:18px 16px 48px}
+h1{font-size:15px;font-weight:500;color:var(--hi);margin:0 0 2px}
+.sub{font-size:11px;color:var(--dim)}
+.sub a{color:var(--txt)}
+.strip{display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);padding:8px 0;margin:13px 0 0}
+.strip button{background:none;border:1px solid transparent;color:var(--dim);font-family:var(--sans);font-size:9.5px;letter-spacing:.07em;padding:3px 7px;border-radius:3px;cursor:pointer}
+.strip button:hover{border-color:var(--lit);color:var(--txt)}
+.strip b{color:var(--hi);font-weight:500}
+nav{display:flex;gap:2px;margin:13px 0 16px;flex-wrap:wrap}
+nav button{background:none;border:1px solid var(--stroke);color:var(--dim);font-family:var(--sans);font-size:11px;letter-spacing:.05em;padding:6px 12px;cursor:pointer;border-radius:3px}
+nav button:hover{color:var(--txt);border-color:var(--lit)}
+nav button[aria-selected=true]{color:var(--hi);border-color:var(--lit);background:var(--panel)}
+.view{display:none}.view.on{display:block}
+p.body{font-size:12.5px;max-width:78ch;margin:0 0 10px}
+h2{font-size:11.5px;font-weight:500;color:var(--hi);letter-spacing:.07em;text-transform:uppercase;margin:22px 0 8px}
+.pnl{background:var(--panel);border:1px solid var(--stroke);border-radius:5px;padding:10px 12px;min-width:0}
+.lb{font-size:9px;letter-spacing:.09em;color:var(--dim);margin:0 0 7px;text-transform:uppercase}
+.rw{font-family:var(--mono);font-size:9.5px;line-height:1.6;word-break:break-word}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin-top:12px}
+.ok{color:var(--ok)}.wn{color:var(--warn)}.cr{color:var(--crit)}.h{color:var(--hi)}
+.note{font-size:10.5px;color:var(--dim);margin:14px 0 0;padding-left:9px;border-left:1px solid var(--stroke)}
+svg{display:block;width:100%;height:auto}
+.ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0}
+button.run{background:var(--panel);color:var(--hi);border:1px solid var(--lit);border-radius:3px;padding:6px 14px;font-family:var(--sans);font-size:11.5px;cursor:pointer}
+button.run:hover{border-color:var(--ok)}
+select{background:var(--panel);color:var(--hi);border:1px solid var(--stroke);border-radius:3px;padding:6px 9px;font-size:11.5px;min-width:220px}
+table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:10px;table-layout:fixed}
+th{text-align:left;font-weight:500;color:var(--dim);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:5px 6px;border-bottom:1px solid var(--stroke)}
+td{padding:5px 6px;border-bottom:1px solid #171d28;vertical-align:top}
+tr.dim td{opacity:.3}tr.lit td{background:#151b26}
+.chip{display:inline-block;font-size:8.5px;letter-spacing:.05em;padding:1px 6px;border-radius:2px;border:1px solid}
+.c-t{color:var(--crit);border-color:#3a2226}.c-o{color:var(--warn);border-color:#3a2f1e}.c-m{color:var(--ok);border-color:#1d3730}
+.count{font-family:var(--mono);font-size:11px;color:var(--hi);margin-top:12px;padding:9px 11px;background:var(--panel);border:1px solid var(--stroke);border-radius:5px}
+.detail{background:var(--panel);border:1px solid var(--lit);border-radius:5px;padding:13px 15px;margin-top:12px;display:none}
+.detail.on{display:block}
+.detail h3{margin:0 0 3px;font-size:13px;color:var(--hi);font-weight:500}
+.detail .meta{font-size:10px;color:var(--dim);margin-bottom:9px}
+.kv{display:grid;grid-template-columns:112px 1fr;gap:3px 10px;font-size:11px;margin-top:8px}
+.kv dt{color:var(--dim);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;padding-top:2px}
+.kv dd{margin:0;color:var(--txt)}
+.close{float:right;background:none;border:1px solid var(--stroke);color:var(--dim);border-radius:3px;font-size:14px;line-height:1;padding:2px 7px;cursor:pointer}
+.lanes{display:flex;gap:0;font-size:8.5px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase;margin-bottom:4px}
+.lanes span{flex:1;text-align:center;padding:4px 0;border-bottom:1px solid var(--stroke)}
+footer{margin-top:36px;padding-top:12px;border-top:1px solid var(--stroke);font-size:8.5px;letter-spacing:.05em;color:#3f4a5c}
+@keyframes pl{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes tv{to{stroke-dashoffset:-40}}
+@keyframes bl{0%,100%{opacity:.45}50%{opacity:.95}}
+.nd{animation:pl 3s ease-in-out infinite;cursor:pointer}
+.dh{stroke-dasharray:3 6;animation:tv 2.4s linear infinite}
+.hb{animation:bl 1.9s ease-in-out infinite}
+.stage{cursor:pointer}
+.stage rect{transition:fill .25s,stroke .25s}
+.stage:hover rect{stroke:#5dcaa5}
+.stage.act rect{fill:#1a2433;stroke:#5dcaa5;stroke-width:1.2}
+@media (prefers-reduced-motion:reduce){.nd,.dh,.hb{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Operations Control Plane — compliance for a multi-jurisdiction platform licensor</h1>
+<div class="sub">Design exercise by Mary Ogola · <a href="mailto:maryogolla040@gmail.com">maryogolla040@gmail.com</a> · <a href="https://linkedin.com/in/mogola">linkedin.com/in/mogola</a> · built from public sources only</div>
+
+<div class="strip" id="strip">
+<button data-f="markets">MARKETS <b>11</b></button>
+<button data-f="reqs">REQUIREMENTS <b>16</b></button>
+<button data-f="ctrls">CONTROLS <b>16</b></button>
+<button data-f="gaps">GAPS <b class="cr">1</b></button>
+<button data-f="partial">PARTIAL <b class="wn">3</b></button>
+<button data-f="stalereg">STALE REG <b class="wn">4</b></button>
+<button data-f="staledoc">STALE DOC <b class="wn">3</b></button>
+<button data-f="silent">SILENT <b class="cr">1</b></button>
+<button data-f="unprov">UNPROVABLE <b class="cr">2</b></button>
+<button data-f="orphan">ORPHANED <b class="cr">1</b></button>
+</div>
+
+<nav role="tablist">
+<button role="tab" aria-selected="true" data-v="plane">CONTROL PLANE</button>
+<button role="tab" aria-selected="false" data-v="arch">END TO END</button>
+<button role="tab" aria-selected="false" data-v="sim">CHANGE SIMULATOR</button>
+<button role="tab" aria-selected="false" data-v="walk">HOW IT WORKS</button>
+<button role="tab" aria-selected="false" data-v="approach">APPROACH</button>
+</nav>
+
+<!-- ================= CONTROL PLANE ================= -->
+<section class="view on" id="plane">
+<p class="body"><b class="h">Click any market.</b> Each node is a market. Each line is a <b class="h">shared control</b> — two markets joined by a line depend on the same control, so changing it for one changes it for both. Red lines carry <b class="cr">global</b> (unscoped) controls. Those are the propagation risk.</p>
+
+<svg viewBox="0 0 660 210" role="img" aria-label="Market graph. Click a market node for detail."><title>Market graph</title>
+<g stroke="#2d3f56" stroke-width="0.6" fill="none" opacity=".5"><path d="M330 105 L175 58"/><path d="M330 105 L145 125"/><path d="M330 105 L200 172"/><path d="M330 105 L472 52"/><path d="M330 105 L515 112"/><path d="M330 105 L452 168"/><path d="M175 58 L472 52"/><path d="M145 125 L200 172"/><path d="M515 112 L452 168"/><path d="M175 58 L145 125"/></g>
+<g class="dh" fill="none" stroke="#e8615f" stroke-width="1.2" opacity=".85"><path d="M330 105 L472 52"/><path d="M330 105 L515 112"/></g>
+<g class="dh" fill="none" stroke="#5dcaa5" stroke-width="1" opacity=".6" style="animation-duration:3.6s"><path d="M330 105 L175 58"/><path d="M330 105 L200 172"/></g>
+<circle cx="330" cy="105" r="17" fill="none" stroke="#efaa3c" stroke-width="0.6" opacity=".35"/>
+<g class="mk" data-m="ke"><circle class="nd" cx="330" cy="105" r="9.5" fill="#efaa3c" style="animation-duration:2.1s"/><text x="330" y="134" text-anchor="middle" font-size="10" fill="#efaa3c">kenya</text></g>
+<g class="mk" data-m="gh"><circle class="nd" cx="472" cy="52" r="6.5" fill="#e8615f" style="animation-duration:2.7s"/><text x="472" y="37" text-anchor="middle" font-size="9" fill="#8b97ab">ghana</text></g>
+<g class="mk" data-m="ng"><circle class="nd" cx="515" cy="112" r="6.5" fill="#e8615f" style="animation-duration:3.2s"/><text x="515" y="132" text-anchor="middle" font-size="9" fill="#8b97ab">nigeria</text></g>
+<g class="mk" data-m="tz"><circle class="nd" cx="175" cy="58" r="5.5" fill="#5dcaa5" style="animation-duration:2.9s"/><text x="175" y="43" text-anchor="middle" font-size="9" fill="#8b97ab">tanzania</text></g>
+<g class="mk" data-m="ug"><circle class="nd" cx="145" cy="125" r="5.5" fill="#5dcaa5" style="animation-duration:3.5s"/><text x="145" y="145" text-anchor="middle" font-size="9" fill="#8b97ab">uganda</text></g>
+<g class="mk" data-m="rw"><circle class="nd" cx="200" cy="172" r="5.5" fill="#5dcaa5" style="animation-duration:2.4s"/><text x="200" y="191" text-anchor="middle" font-size="9" fill="#8b97ab">rwanda</text></g>
+<g class="mk" data-m="bj"><circle class="nd" cx="452" cy="168" r="5.5" fill="#5dcaa5" style="animation-duration:3.8s"/><text x="452" y="187" text-anchor="middle" font-size="9" fill="#8b97ab">benin</text></g>
+<text x="598" y="108" font-size="9" fill="#5f6b80">+4 verified</text>
+</svg>
+
+<div class="detail" id="mdet"></div>
+
+<div class="grid">
+<div class="pnl"><p class="lb">Change log</p><div class="rw">08:14 <span class="wn">detect</span> KE act 2025<br>08:14 assess 6 surfaces<br>08:15 <span class="cr">warn</span> 2 global ctrl<br>08:16 <span class="ok">seq</span> by exposure</div></div>
+<div class="pnl"><p class="lb">Blast radius</p><div class="rw">requirements <span class="wn">6</span><br>market-scoped 4<br>global <span class="cr">2</span><br>markets at risk <span class="cr">2</span></div></div>
+<div class="pnl"><p class="lb">Exception heat</p><div style="display:flex;gap:2px;align-items:flex-end;height:32px;margin-bottom:5px"><div class="hb" style="flex:1;height:38%;background:#5dcaa5"></div><div class="hb" style="flex:1;height:62%;background:#5dcaa5;animation-delay:.2s"></div><div class="hb" style="flex:1;height:88%;background:#efaa3c;animation-delay:.45s"></div><div class="hb" style="flex:1;height:52%;background:#5dcaa5;animation-delay:.1s"></div><div class="hb" style="flex:1;height:100%;background:#e8615f;animation-delay:.62s"></div><div class="hb" style="flex:1;height:28%;background:#5dcaa5;animation-delay:.32s"></div></div><div class="rw">top <span class="cr">MissingDocument</span></div></div>
+<div class="pnl"><p class="lb">Control heartbeat</p><div class="rw">CTL-KYC-01 <span class="ok">ok</span><br>CTL-TAX-01 <span class="ok">ok</span><br>CTL-ADV-03 <span class="cr">silent 41d</span><br>CTL-PP-02 <span class="wn">partial</span></div></div>
+<div class="pnl"><p class="lb">Escalation</p><div class="rw">raised today 14<br>routed to human <span class="ok">11</span><br>rate <span class="ok">79%</span><br><span style="color:var(--dim)">falling = warning</span></div></div>
+<div class="pnl"><p class="lb">Documentation</p><div class="rw">stale SOPs <span class="wn">3</span><br>undocumented ctrl <span class="cr">1</span><br>process-doc drift <span class="cr">1</span><br>training gap <span class="wn">1</span></div></div>
+</div>
+<p class="note"><b class="h">The negatives are the finding.</b> CTL-ADV-03 has not run in 41 days and nothing errored.</p>
+</section>
+
+<!-- ================= END TO END ================= -->
+<section class="view" id="arch">
+<p class="body">The complete journey: a regulator publishes something, and fifteen stages later you can prove you complied. Four lanes show <b class="h">who does what</b> — external, automation, human, system of record. <b class="h">Press PLAY to walk it, or click any stage.</b></p>
+
+<div class="ctl">
+<button class="run" id="play">▶ PLAY</button>
+<button class="run" id="stepb">‹</button>
+<button class="run" id="stepf">›</button>
+<span style="font-size:10.5px;color:var(--dim)" id="stagelbl">stage — of 15</span>
+</div>
+
+<div class="lanes"><span>EXTERNAL</span><span>AUTOMATION</span><span>HUMAN</span><span>RECORD</span></div>
+<svg id="flow" viewBox="0 0 640 1010" role="img" aria-label="End to end compliance process across four lanes"><title>End to end process</title></svg>
+
+<div class="detail" id="sdet"></div>
+
+<p class="note"><b class="h">Automate execution, not accountability.</b> Every stage in the automation lane writes an audit trail. None of them decides anything. The loop from stage 15 back to stage 1 is the point — this does not end, it cycles, and each cycle must leave evidence behind.</p>
+</section>
+
+<!-- ================= SIMULATOR ================= -->
+<section class="view" id="sim">
+<p class="body">A law changes in one market. The register turns "what does this affect?" from an investigation into a query.</p>
+<div class="ctl">
+<select id="pick">
+<option value="ke">Kenya — Gambling Control Act 2025 (real, sourced)</option>
+<option value="fmt">New monthly reporting format (synthetic)</option>
+<option value="dep">Mandatory per-player deposit limit (synthetic)</option>
+</select>
+<button class="run" id="go">RUN</button>
+</div>
+<p id="desc" class="body" style="color:var(--dim);font-size:11.5px"></p>
+<table id="tbl"><thead><tr><th style="width:24%">Surface</th><th style="width:34%">Change required</th><th style="width:16%">Class</th><th style="width:13%">Scope</th><th style="width:13%">Risk</th></tr></thead><tbody></tbody></table>
+<div class="count" id="cnt">Press RUN to compute the blast radius.</div>
+<p class="note" id="warn" style="display:none"></p>
+</section>
+
+
+<!-- ================= WALKTHROUGH ================= -->
+<section class="view" id="walk">
+<p class="body">The whole system in one read, from where an obligation is born to the moment you can prove you met it. Six acts.</p>
+
+<h2>Act 0 — Inception: where obligations come from</h2>
+<p class="body">Nothing in this system originates inside the company. Every requirement traces back to something a legislature or regulator published, and that lineage has to be recorded or the register is just opinion.</p>
+
+<svg viewBox="0 0 640 300" role="img" aria-label="Provenance chain from statute to evidence"><title>Provenance chain</title>
+<text x="20" y="18" font-size="9" fill="#5f6b80" letter-spacing="1">EXTERNAL — WE DO NOT CONTROL THIS</text>
+<g fill="#1a1414" stroke="#3a2226" stroke-width="0.7">
+<rect x="20" y="28" width="260" height="34" rx="5"/><rect x="20" y="70" width="260" height="34" rx="5"/><rect x="20" y="112" width="260" height="34" rx="5"/></g>
+<g font-size="10" fill="#c9d4e4"><text x="150" y="49" text-anchor="middle">Statute</text><text x="150" y="91" text-anchor="middle">Regulator instrument</text><text x="150" y="133" text-anchor="middle">Licence condition</text></g>
+<g font-size="8" fill="#5f6b80"><text x="290" y="49">Gambling Control Act 2025</text><text x="290" y="91">regulation · circular · guidance</text><text x="290" y="133">held by the licensee, not us</text></g>
+<g stroke="#3a2226" stroke-width="0.7"><line x1="150" y1="62" x2="150" y2="70"/><line x1="150" y1="104" x2="150" y2="112"/></g>
+<line x1="20" y1="158" x2="620" y2="158" stroke="#2d3f56" stroke-width="0.6" stroke-dasharray="4 4"/>
+<text x="20" y="176" font-size="9" fill="#5f6b80" letter-spacing="1">INTERNAL — WE OWN EVERYTHING BELOW</text>
+<g fill="#131a18" stroke="#1d3730" stroke-width="0.7">
+<rect x="20" y="186" width="260" height="26" rx="5"/><rect x="20" y="218" width="260" height="26" rx="5"/><rect x="20" y="250" width="260" height="26" rx="5"/></g>
+<g font-size="9.5" fill="#c9d4e4"><text x="150" y="203" text-anchor="middle">Requirement → Policy</text><text x="150" y="235" text-anchor="middle">SOP → Control</text><text x="150" y="267" text-anchor="middle">Evidence</text></g>
+<g font-size="8" fill="#5f6b80"><text x="290" y="203">versioned, approved, dated</text><text x="290" y="235">owned, typed, tested</text><text x="290" y="267">tagged, retrievable, dated</text></g>
+<g stroke="#1d3730" stroke-width="0.7"><line x1="150" y1="212" x2="150" y2="218"/><line x1="150" y1="244" x2="150" y2="250"/></g>
+<path d="M20 263 C-4 263 -4 200 14 200" fill="none" stroke="#5dcaa5" stroke-width="0.7" stroke-dasharray="3 3"/>
+</svg>
+
+<p class="body">Two questions become answerable only when that chain exists. <b class="h">Why does this control exist?</b> Trace up. If you cannot, the control is orphaned — you are doing work with no recorded authority for it. <b class="h">Is it still required?</b> If an instrument above it was superseded and nobody reviewed the descendants, you are enforcing a dead rule and calling it compliance.</p>
+
+<h2>Act 1 — Detection (stages 1 to 3)</h2>
+<p class="body">A regulator publishes. We find out three ways: a scheduled monitor on publication pages, a licensee telling us informally, or industry press as a backstop. Automated monitoring is a net, not a guarantee — publication practice varies by country and page monitoring is brittle, so every market has a <b class="h">named human owner</b> who triages every hit. Monitoring that is nobody's explicit job does not happen.</p>
+<p class="body">A human then classifies it: clarification, tightening, new obligation, or structural. The system can suggest from keywords. It must not decide.</p>
+
+<h2>Act 2 — Assessment (stages 4 to 6)</h2>
+<p class="body">This is where the register earns its existence. Query it by market and affected category, and you get back every requirement touched, every control serving them, and every owner. Without that map you discover which processes were affected by finding out which ones broke.</p>
+<p class="body">Then the step almost nobody builds: the <b class="h">propagation check</b>. Each control is tagged market-scoped or global. A global control shared by several markets means changing it for one changes it for all of them. Kenya's advertising and AML surfaces are both global — so tightening either for Kenya, without market-scoping first, either over-applies Kenyan rules to sixteen other countries or quietly misses the requirement. That single computation is the difference between a register and a risk system.</p>
+<p class="body">A human then sequences the work by regulatory exposure first, financial exposure second, friction last. Not by whichever is most annoying.</p>
+
+<h2>Act 3 — Implementation (stages 7 to 12)</h2>
+<p class="body">Six stages, and four of them are the ones organisations skip.</p>
+<p class="body"><b class="h">Register and policy</b> are updated as versioned artifacts with an approver, a change reason, and an effective date that is separate from the approval date. <b class="h">Config and workflow</b> change next — market-scoped by default, so a regulatory change becomes a config change with an audit trail rather than a code release.</p>
+<p class="body">Then <b class="h">the SOP</b>, and there is an automation whose only job is to catch its absence: if a workflow version changed and no SOP version changed with it, an exception is raised. That gap between what people are told to do and what they must do is the most common documentation failure there is.</p>
+<p class="body">Then <b class="h">training</b>. A control that depends on people behaving differently does not exist until those people know. Completion is evidence, not admin — an auditor asks who was trained and when, and "we sent an email" is not an answer. Then <b class="h">QA and UAT</b>, testing both that the control is correctly designed and that it actually operates, because those are different tests and they can disagree.</p>
+<p class="body">Finally the <b class="h">effective date</b>, with its own countdown and its own blocking alert. Regulations have commencement dates. Being ready two weeks late is a breach even if the work was excellent.</p>
+
+<h2>Act 4 — Operation (stages 13 to 14)</h2>
+<p class="body">Now the control runs, and exceptions start appearing. An exception is not a failure — <b class="h">an exception being raised is the control working</b>. The failure mode is an exception quietly absorbed to hit a turnaround target.</p>
+<p class="body">Each one is classified and routed up a five-tier ladder. Missing information goes to operations, which may send two automated requests and no more — repeatedly asking for documents until something passes is a failure pattern dressed as diligence. Inconsistencies go to a compliance owner. Substantive concerns go to the designated officer and receive <b class="cr">routing and nothing else</b>: no automated request, no auto-close. If a case has a genuine concern, an automated document request tells the counterparty exactly what would make the problem disappear.</p>
+<p class="body">The decision is human, always, and it writes back to the register with its reasoning. If a human decision does not get recorded, the audit trail has a hole precisely where the important thing happened.</p>
+
+<h2>Act 5 — Proof (stage 15)</h2>
+<p class="body">Six months later somebody asks: did this control operate? That is answerable only if three things existed at the moment it ran — <b class="h">the log entry, the actor, and the dated artifact tagged to the requirement</b>. Missing any one and the control is unprovable, which in an audit is indistinguishable from absent.</p>
+<p class="body">This is why evidence is captured as activity happens rather than assembled when a report is due. Done that way, an audit is a query. Done the other way, an audit is a reconstruction from bank statements, inboxes and memory — and it becomes a crisis every cycle.</p>
+<p class="body">Alongside it runs the heartbeat: a daily check that every control produced evidence within its expected interval. A control that has silently stopped looks identical to one that is working, because nothing errors. Absence of errors is not evidence of operation.</p>
+
+<h2>And then it repeats</h2>
+<p class="body">Stage 15 loops back to stage 1. The cycle never closes — regulators keep publishing, and each pass has to leave evidence behind. The system is not a project with an end date. It is a standing capability, and the measure of it is whether the next change takes days to assess instead of weeks.</p>
+
+<h2>What breaks it</h2>
+<p class="body">Four failure modes, all of which this design is built to surface rather than hide. <b class="h">An unsourced requirement</b> — nobody can say why it exists. <b class="h">A silent control</b> — stopped operating, nothing errored. <b class="h">An unprovable control</b> — it ran, but you cannot demonstrate that it did. <b class="h">A falling escalation rate</b> — which looks like improvement and usually means operations has started absorbing judgement calls it should be passing up.</p>
+<p class="body">Each of those has a counter on the front page. They are meant to be uncomfortable.</p>
+</section>
+
+<!-- ================= APPROACH ================= -->
+<section class="view" id="approach">
+<h2>Where obligations come from</h2>
+<p class="body">Statute → regulator instrument → licence condition → requirement → internal policy → SOP → control → evidence. Everything above the licence condition is external and we do not control it. Everything below it we own entirely. A control that cannot be traced up that chain is <b class="h">orphaned</b> — work with no known authority. A chain where an ancestor was superseded and the descendants were never reviewed means we are <b class="cr">enforcing a dead rule</b>.</p>
+
+<h2>The framing</h2>
+<p class="body">A platform licensor typically holds <b class="h">no gaming licence and no customer funds</b> — its local partners hold those. So the obligation is not "keep our licence." It is to ensure the platform lets each licensee satisfy what their regulator requires, across every market at once, without a change made for one market silently breaking another. That is a requirements-mapping and change-propagation problem, which is an operations discipline.</p>
+
+<h2>Three obligation buckets</h2>
+<p class="body"><b class="h">Ours</b> — we must do it. <b class="h">Theirs</b> — the licensee must; we track that they can. <b class="wn">Ours to enable</b> — the obligation lands on the licensee but is unmeetable without a platform capability. The third bucket is where failures originate, because nobody owns it by default.</p>
+
+<h2>Two principles</h2>
+<p class="body"><b class="h">Automate execution, not accountability.</b> Execution is what a scenario does. Accountability is who answers for it. A workflow tool can hold the first and never the second. The corollary: automation should make escalation <i>easier</i>, not rarer. A falling escalation rate is a warning.</p>
+<p class="body"><b class="h">Audit preparation becomes continuous audit readiness.</b> Evidence captured as activity happens makes an audit a query. Evidence reconstructed afterwards makes it a crisis.</p>
+
+<h2>Design and operating effectiveness are different tests</h2>
+<p class="body">A control can be perfectly designed and never run. The dangerous quadrant is a control running reliably that checks the wrong thing — false assurance, which testing operation alone will never find.</p>
+
+<h2>Exception, incident, breach</h2>
+<p class="body">An <b class="h">exception</b> means a control fired — evidence it works. An <b class="h">incident</b> means a control failed or was bypassed and we caught it. A <b class="h">breach</b> means a requirement was not met. Rising exceptions with flat incidents is healthy. Few exceptions with occasional incidents means things are getting through.</p>
+
+<h2>What I bring, and what I would learn</h2>
+<p class="body">Compliance operations across three regulatory environments: KYC and KYB across three regions at a blockchain fintech, compliance accuracy improved around 45%, no known breach through 3x client growth; grant and donor compliance at a nonprofit, where capturing evidence as activity happened cut audit-preparation effort roughly in half; and internal controls in current operations roles, including a data-integrity audit that recovered over $700,000 in unrecorded closed revenue.</p>
+<p class="body">I have not worked in iGaming. Certification and licensing processes, and formal regulatory horizon-scanning, are where I have least direct experience. The operating discipline transfers: understand the requirement, translate it into a process, assign ownership, capture evidence, catch exceptions, escalate what needs judgement, and measure whether any of it works.</p>
+</section>
+
+<footer>ILLUSTRATIVE DATA · DESIGN EXERCISE FROM PUBLIC SOURCES · NOT LEGAL ADVICE · NOT AFFILIATED WITH OR ENDORSED BY ANY COMPANY REFERENCED</footer>
+</div>
+
+<script>
+/* ---------- data ---------- */
+var STAGES=[
+{n:1,lane:0,t:"Regulator publishes",who:"Regulator or legislature",tool:"—",out:"Statute, regulation, circular or licence condition",stop:"We do not control this. We only detect it.",d:"The origin of every obligation. Kenya's Gambling Control Act 2025 came into force 26 August 2025, replacing Cap. 131."},
+{n:2,lane:1,t:"Detect",who:"System, then market owner",tool:"SCN-11 regulator monitor",out:"Draft change record, dated and sourced",stop:"Automation flags. A human confirms it is real and relevant.",d:"Scheduled checks on publication pages, plus licensee notifications captured as tickets. Automated monitoring is a net, not a guarantee — publication practice varies and page monitoring is brittle."},
+{n:3,lane:2,t:"Triage and classify",who:"Compliance owner",tool:"—",out:"Classification: clarification, tightening, new obligation or structural",d:"The system can suggest a class from keywords. It must not decide one.",stop:"Pure judgement. No automation."},
+{n:4,lane:1,t:"Assess impact",who:"System",tool:"Register query",out:"Affected requirements, controls and owners",stop:"Query only. No decisions.",d:"This is why the register exists. Without it, you discover which processes were affected by finding out which ones broke."},
+{n:5,lane:1,t:"Propagation check",who:"System",tool:"Blast radius engine",out:"Market-scoped vs global split; markets at risk",stop:"Computes exposure. Does not act on it.",d:"The critical step. A control marked global and shared by N markets means changing it for one changes all N. Kenya's advertising and AML surfaces are both global — that is the finding."},
+{n:6,lane:2,t:"Sequence and assign",who:"Compliance ops + department heads",tool:"—",out:"Remediation plan, ordered by regulatory exposure",stop:"Human prioritisation.",d:"Order by regulatory exposure, then financial, then friction. Not by whichever is most annoying."},
+{n:7,lane:3,t:"Update register and policy",who:"Compliance ops",tool:"Versioned write",out:"New requirement rows; POL-xxx version bump with approver and effective date",stop:"—",d:"Approval date and effective date are separate. Approved 12 August, effective 26 August is normal and the gap must be visible."},
+{n:8,lane:1,t:"Build config and workflow",who:"Platform + ops",tool:"Make.com scenario version bump; config diff logged",out:"Versioned config change with audit trail",stop:"Automation records it. A human makes the change.",d:"Configuration over code, market-scoped by default. A stake floor or document-type list should be per-market config, not hardcoded behaviour — then a regulatory change is a config change with an audit trail, not a release."},
+{n:9,lane:3,t:"Update SOP",who:"Documentation owner",tool:"SCN-12 doc-gap detector",out:"SOP-xxx version bump",stop:"SCN-12 raises an exception if the workflow changed and the SOP did not.",d:"The most common documentation failure there is: a process change with no matching document change, creating a gap between what people are told to do and what they must do."},
+{n:10,lane:2,t:"Train",who:"People ops + ops manager",tool:"SCN-13 completion tracker",out:"Training completion record, per person, dated",stop:"Automation chases. People learn.",d:"A control that depends on people behaving differently does not exist until those people know. Completion is evidence, not admin — an auditor asks who was trained and when, and 'we sent an email' is not an answer."},
+{n:11,lane:2,t:"QA and UAT",who:"Ops manager",tool:"Test cases generated from the requirement",out:"Signed test evidence",stop:"Human signs off.",d:"Test both that the control is correctly designed and that it actually operates. Those are different tests and they can disagree."},
+{n:12,lane:1,t:"Go live on effective date",who:"System",tool:"SCN-14 effective-date countdown",out:"Readiness status vs date; blocking alert at zero",stop:"Alerts. Does not launch anything by itself.",d:"Regulations have commencement dates. Being ready two weeks late is a breach even if the work was excellent."},
+{n:13,lane:1,t:"Control operates",who:"System",tool:"SCN-01 case creation, SCN-02 routing, SCN-03 follow-up, SCN-04 escalation",out:"Cases, exceptions, tier assignments",stop:"Tier 3 receives routing and nothing else.",d:"An exception being raised is the control working. The failure mode is an exception absorbed silently to hit a turnaround target. Hard cap: two automated document requests, then a human."},
+{n:14,lane:2,t:"Decide",who:"Authority holder by tier",tool:"—",out:"Decision plus rationale, written back to the register",stop:"Never automated. Ever.",d:"Operations owns the workflow. It never owns the risk decision. Whether a discrepancy is acceptable, whether an alert is a true match, whether to accept a risk — all human, all recorded with reasoning."},
+{n:15,lane:3,t:"Evidence, monitor, prove",who:"System + compliance ops",tool:"SCN-05 audit log, SCN-06 evidence pack, SCN-08 heartbeat, SCN-09 staleness",out:"Dated evidence tagged to the requirement; heartbeat status; audit pack on demand",stop:"Human signs the pack.",d:"Six months later the question is: did this control operate? Answerable only if three things existed at the moment it ran — the log entry, the actor, and the dated artifact. Missing any one makes the control unprovable, which in an audit is indistinguishable from absent. Then the cycle returns to stage 1."}
+];
+
+var MKT={
+ke:{n:"Kenya",r:"Betting Control and Licensing Board / new authority under the Gambling Control Act 2025",v:1,tier:"High",reqs:16,ctrl:16,glob:2,shared:"2 global controls shared with Ghana and Nigeria — advertising rules and AML tooling. Changing either for Kenya changes both.",exc:"4 open · 1 at Tier 3",doc:"2 SOPs stale · 1 process-doc drift",src:"Gambling Control Act 2025 (in force 26 Aug 2025, replacing Cap. 131). POCAMLA for AML. Data Protection Act 2019.",note:"Home market. Primary sources readable directly. Active scenario."},
+gh:{n:"Ghana",r:"Gaming Commission of Ghana",v:1,tier:"Medium",reqs:12,ctrl:11,glob:2,shared:"Shares the global advertising and AML controls with Kenya and Nigeria. A Kenya-driven change to either propagates here unless market-scoped first.",exc:"2 open",doc:"1 SOP stale",src:"Illustrative — not independently verified for this exercise.",note:"Operated under licensing partnership."},
+ng:{n:"Nigeria",r:"State and federal regulators (structure varies)",v:1,tier:"High",reqs:14,ctrl:12,glob:2,shared:"Shares the global advertising and AML controls with Kenya and Ghana.",exc:"3 open · 1 ageing past SLA",doc:"1 undocumented control",src:"Illustrative — not independently verified for this exercise.",note:"Multi-tier regulatory structure increases mapping complexity."},
+tz:{n:"Tanzania",r:"Gaming Board of Tanzania",v:1,tier:"Medium",reqs:9,ctrl:9,glob:0,shared:"All controls market-scoped. No propagation exposure from other markets.",exc:"1 open",doc:"clean",src:"Illustrative — not independently verified.",note:"Cleanest register in the set. Market-scoped throughout."},
+ug:{n:"Uganda",r:"Lotteries and Gaming Regulatory Board",v:1,tier:"Medium",reqs:8,ctrl:8,glob:0,shared:"All controls market-scoped.",exc:"1 open",doc:"1 SOP stale",src:"Illustrative — not independently verified.",note:""},
+rw:{n:"Rwanda",r:"Rwanda regulatory authority",v:1,tier:"Low",reqs:7,ctrl:7,glob:0,shared:"All controls market-scoped.",exc:"0 open",doc:"clean",src:"Illustrative — not independently verified.",note:"African HQ located here."},
+bj:{n:"Benin",r:"National regulator",v:1,tier:"Low",reqs:6,ctrl:6,glob:0,shared:"All controls market-scoped.",exc:"0 open",doc:"clean",src:"Illustrative — not independently verified.",note:"Francophone market. French-language documentation requirement."}
+};
+
+var SC={
+ke:{d:"Came into force 26 August 2025, replacing the Betting, Lotteries and Gaming Act (Cap. 131, 1966). Separate licences for online bookmakers, lotteries and casinos; strengthened player protection, advertising, AML and responsible gambling; minimum online stake; new consolidated regulatory authority. Verify against primary sources before relying on any detail.",
+r:[["Licence structure","Separate online licence types; register rows re-based on the new instrument","Structural","market","low"],["Identity and age verification","Player and minor protection strengthened","Tightening","market","med"],["Stake configuration","Minimum online stake enforced at input","New obligation","market","low"],["Advertising controls","Messaging, age warnings, channel restrictions strengthened","Tightening","global","high"],["AML programme and reporting","Strengthened under the new framework","Tightening","global","high"],["Regulator relationship","New authority; channels, contacts, formats","Structural","market","med"]],
+w:"The two high-risk rows are the finding. Advertising runs through a shared creative pipeline and AML tooling is global. Tightening either for Kenya without market-scoping first risks over-applying Kenyan rules to sixteen other markets, or under-applying and missing the requirement."},
+fmt:{d:"Synthetic. A regulator mandates a new monthly submission format with different field granularity.",
+r:[["Report assembly","Rebuild the monthly pack to the new schema","New obligation","market","med"],["Evidence tagging","Confirm existing evidence carries the fields the new format needs","Tightening","global","high"],["Submission channel","New portal and credentials","Structural","market","low"]],
+w:"Tests whether evidence was tagged well enough to be re-cut into a new shape. If evidence was captured only in the shape of the old report, a format change becomes a data-collection project rather than a query."},
+dep:{d:"Synthetic. A market mandates a per-player deposit limit with a cooling-off period on increases.",
+r:[["Deposit limit enforcement","Enforce cap at transaction; cooling-off on increases","New obligation","global","high"],["Player communications","Notify affected players, surface current limit","New obligation","market","med"],["Reporting","Evidence limits were applied and respected","New obligation","market","med"]],
+w:"An Ours-to-enable scenario. The obligation lands on the licensee but is impossible without a platform capability, so it surfaces as platform backlog. The limit logic being global is the risk."}};
+
+/* ---------- helpers ---------- */
+function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function el(n,a){var e=document.createElementNS("http://www.w3.org/2000/svg",n);for(var k in a)e.setAttribute(k,a[k]);return e}
+
+/* ---------- flow diagram ---------- */
+var LANEX=[80,240,400,560], ROW=64, TOP=26, FILL=["#1a1414","#12161f","#141a24","#131a18"], STK=["#3a2226","#232b3a","#2d3f56","#1d3730"];
+var svg=document.getElementById("flow"), cur=-1, timer=null;
+
+function drawFlow(){
+  for(var i=0;i<STAGES.length;i++){
+    var s=STAGES[i], x=LANEX[s.lane], y=TOP+i*ROW;
+    if(i<STAGES.length-1){
+      var s2=STAGES[i+1], x2=LANEX[s2.lane], y2=TOP+(i+1)*ROW;
+      var p=el("path",{d:"M"+x+" "+(y+22)+" C"+x+" "+(y+42)+" "+x2+" "+(y2-20)+" "+x2+" "+y2,
+        fill:"none",stroke:"#2d3f56","stroke-width":"0.8",opacity:".55"});
+      svg.appendChild(p);
+    }
+    var g=el("g",{"class":"stage","data-i":i});
+    g.appendChild(el("rect",{x:x-72,y:y-18,width:144,height:40,rx:5,fill:FILL[s.lane],stroke:STK[s.lane],"stroke-width":"0.7"}));
+    var num=el("text",{x:x-64,y:y-4,"font-size":"8.5",fill:"#5f6b80"});num.textContent=s.n;g.appendChild(num);
+    var t=el("text",{x:x,y:y-2,"text-anchor":"middle","font-size":"10",fill:"#c9d4e4"});t.textContent=s.t;g.appendChild(t);
+    var w=el("text",{x:x,y:y+13,"text-anchor":"middle","font-size":"8",fill:"#5f6b80"});w.textContent=s.tool==="—"?s.who:s.tool.split(",")[0];g.appendChild(w);
+    svg.appendChild(g);
+  }
+  var last=TOP+(STAGES.length-1)*ROW;
+  svg.appendChild(el("path",{d:"M"+(LANEX[3]+72)+" "+last+" C620 "+last+" 620 10 "+LANEX[0]+" 10 L"+LANEX[0]+" "+(TOP-20),
+    fill:"none",stroke:"#5dcaa5","stroke-width":"0.8","stroke-dasharray":"4 4",opacity:".55"}));
+  var lp=el("text",{x:"612",y:"500","text-anchor":"middle","font-size":"9",fill:"#5dcaa5",transform:"rotate(90 612 500)"});
+  lp.textContent="cycle repeats — each cycle leaves evidence";svg.appendChild(lp);
+}
+drawFlow();
+
+function showStage(i){
+  cur=i;
+  var gs=svg.querySelectorAll(".stage");
+  for(var k=0;k<gs.length;k++) gs[k].classList.toggle("act", k===i);
+  var s=STAGES[i], LN=["External","Automation","Human","Record"];
+  var d=document.getElementById("sdet");
+  d.innerHTML='<button class="close" id="cs">×</button><h3>'+s.n+'. '+esc(s.t)+'</h3><div class="meta">'+LN[s.lane]+' lane</div><p style="font-size:12px;margin:0">'+esc(s.d)+'</p>'+
+    '<dl class="kv"><dt>Who</dt><dd>'+esc(s.who)+'</dd><dt>Tool</dt><dd>'+esc(s.tool)+'</dd><dt>Output</dt><dd>'+esc(s.out)+'</dd><dt>Boundary</dt><dd>'+esc(s.stop||"—")+'</dd></dl>';
+  d.classList.add("on");
+  document.getElementById("cs").onclick=function(){d.classList.remove("on")};
+  document.getElementById("stagelbl").textContent="stage "+s.n+" of "+STAGES.length;
+}
+svg.addEventListener("click",function(e){
+  var g=e.target.closest?e.target.closest(".stage"):null;
+  if(g) { if(timer){clearInterval(timer);timer=null;document.getElementById("play").textContent="▶ PLAY";} showStage(+g.dataset.i); }
+});
+document.getElementById("stepf").onclick=function(){showStage(Math.min(cur+1,STAGES.length-1))};
+document.getElementById("stepb").onclick=function(){showStage(Math.max(cur-1,0))};
+document.getElementById("play").onclick=function(){
+  var b=this;
+  if(timer){clearInterval(timer);timer=null;b.textContent="▶ PLAY";return;}
+  b.textContent="❚❚ PAUSE"; if(cur>=STAGES.length-1) cur=-1;
+  timer=setInterval(function(){
+    if(cur>=STAGES.length-1){clearInterval(timer);timer=null;b.textContent="▶ PLAY";return;}
+    showStage(cur+1);
+  },1900);
+  showStage(cur+1);
+};
+
+/* ---------- market drilldown ---------- */
+document.querySelector("#plane svg").addEventListener("click",function(e){
+  var g=e.target.closest?e.target.closest(".mk"):null; if(!g) return;
+  var m=MKT[g.dataset.m]; if(!m) return;
+  var d=document.getElementById("mdet");
+  d.innerHTML='<button class="close" id="cm">×</button><h3>'+esc(m.n)+'</h3><div class="meta">'+esc(m.r)+' · risk tier '+esc(m.tier)+(m.v?' · presence publicly reported':'')+'</div>'+
+    '<dl class="kv">'+
+    '<dt>Requirements</dt><dd>'+m.reqs+'</dd>'+
+    '<dt>Controls</dt><dd>'+m.ctrl+' ('+m.glob+' global, '+(m.ctrl-m.glob)+' market-scoped)</dd>'+
+    '<dt>Shared deps</dt><dd>'+esc(m.shared)+'</dd>'+
+    '<dt>Exceptions</dt><dd>'+esc(m.exc)+'</dd>'+
+    '<dt>Documents</dt><dd>'+esc(m.doc)+'</dd>'+
+    '<dt>Provenance</dt><dd>'+esc(m.src)+'</dd>'+
+    (m.note?'<dt>Note</dt><dd>'+esc(m.note)+'</dd>':'')+'</dl>';
+  d.classList.add("on");
+  document.getElementById("cm").onclick=function(){d.classList.remove("on")};
+  d.scrollIntoView({behavior:"smooth",block:"nearest"});
+});
+
+/* ---------- status strip ---------- */
+var FILT={
+markets:"11 markets with publicly reported presence. Sources say 17 African countries; 6 could not be independently verified for this exercise and are excluded rather than fabricated.",
+reqs:"16 requirements in the seeded register, weighted to Kenya where primary sources are readable directly.",
+ctrls:"16 controls. 2 are global (unscoped) — those are the propagation risk. 14 are market-scoped.",
+gaps:"1 gap: KE-ADV-03, watershed hour restrictions for broadcast advertising. No control mapped, no evidence location.",
+partial:"3 partial: KE-KYC-03 enhanced review triggers, KE-PP-02 vulnerable player mechanisms, KE-DATA-01 retention policy.",
+stalereg:"4 register rows past their own review period. Staleness is the default state of any register nobody maintains.",
+staledoc:"3 SOPs past review cycle, plus 1 process-doc drift case where a workflow version changed and the SOP did not. SCN-12 catches that.",
+silent:"1 silent control: CTL-ADV-03 has produced no evidence of operating for 41 days. Nothing errored. Absence of errors is not evidence of operation.",
+unprov:"2 unprovable controls: no log entry, no recorded actor, or no dated artifact. Six months from now we could not demonstrate they operated. In an audit that is indistinguishable from absent.",
+orphan:"1 orphaned control: no source_id anywhere up the provenance chain. We are doing work with no recorded authority for it."
+};
+document.getElementById("strip").addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("button"):null; if(!b) return;
+  var d=document.getElementById("mdet");
+  document.querySelector('nav button[data-v="plane"]').click();
+  d.innerHTML='<button class="close" id="cm">×</button><h3>'+esc(b.textContent.trim())+'</h3><p style="font-size:12px;margin:6px 0 0">'+esc(FILT[b.dataset.f])+'</p>';
+  d.classList.add("on");
+  document.getElementById("cm").onclick=function(){d.classList.remove("on")};
+});
+
+/* ---------- simulator ---------- */
+function run(){
+  var s=SC[document.getElementById("pick").value];
+  document.getElementById("desc").textContent=s.d;
+  var tb=document.querySelector("#tbl tbody");tb.innerHTML="";
+  var warn=document.getElementById("warn");warn.style.display="none";
+  var g=0;
+  s.r.forEach(function(row,i){
+    var tr=document.createElement("tr");tr.className="dim";
+    var cls=row[2]==="Structural"?"c-t":(row[2]==="New obligation"?"c-o":"c-m");
+    var risk=row[4]==="high"?'<span class="cr">HIGH</span>':(row[4]==="med"?'<span class="wn">med</span>':'<span class="ok">low</span>');
+    var scope=row[3]==="global"?'<span class="cr">global</span>':'<span class="ok">market</span>';
+    tr.innerHTML="<td>"+esc(row[0])+"</td><td>"+esc(row[1])+"</td><td><span class='chip "+cls+"'>"+esc(row[2])+"</span></td><td>"+scope+"</td><td>"+risk+"</td>";
+    tb.appendChild(tr); if(row[3]==="global")g++;
+    setTimeout(function(){tr.className=row[4]==="high"?"lit":""},170*(i+1));
+  });
+  setTimeout(function(){
+    document.getElementById("cnt").innerHTML="1 change  →  <span class='h'>"+s.r.length+"</span> surfaces  →  <span class='cr'>"+g+"</span> shared control"+(g===1?"":"s")+" at propagation risk  →  <span class='cr'>"+g+"</span> other market"+(g===1?"":"s")+" that could be silently changed";
+    warn.innerHTML="<b class='h'>Propagation risk.</b> "+esc(s.w);warn.style.display="block";
+  },170*(s.r.length+1));
+}
+document.getElementById("go").onclick=run;
+document.getElementById("pick").onchange=function(){
+  document.querySelector("#tbl tbody").innerHTML="";document.getElementById("desc").textContent="";
+  document.getElementById("warn").style.display="none";
+  document.getElementById("cnt").textContent="Press RUN to compute the blast radius.";
+};
+
+/* ---------- tabs ---------- */
+Array.prototype.forEach.call(document.querySelectorAll("nav button"),function(b){
+  b.onclick=function(){
+    Array.prototype.forEach.call(document.querySelectorAll("nav button"),function(x){x.setAttribute("aria-selected","false")});
+    Array.prototype.forEach.call(document.querySelectorAll(".view"),function(v){v.classList.remove("on")});
+    b.setAttribute("aria-selected","true");
+    document.getElementById(b.dataset.v).classList.add("on");
+  };
+});
+</script>
+</body>
+</html>
