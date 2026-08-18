@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compliance Operations Control Plane — Design Exercise</title>
+<style>
+:root{
+--void:#0b0e14;--panel:#12161f;--stroke:#232b3a;--lit:#2d3f56;
+--hi:#c9d4e4;--txt:#8b97ab;--dim:#5f6b80;
+--ok:#5dcaa5;--warn:#efaa3c;--crit:#e8615f;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--txt);font-family:var(--sans);font-size:13px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
+header h1{font-size:15px;font-weight:500;color:var(--hi);margin:0 0 2px;letter-spacing:.01em}
+header p{margin:0;font-size:11px;color:var(--dim)}
+header a{color:var(--txt)}
+.strip{display:flex;gap:16px;flex-wrap:wrap;font-size:10px;letter-spacing:.07em;color:var(--dim);border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);padding:9px 0;margin:14px 0 0}
+.strip b{color:var(--hi);font-weight:500}
+nav{display:flex;gap:2px;margin:14px 0 16px;flex-wrap:wrap}
+nav button{background:none;border:1px solid var(--stroke);color:var(--dim);font-family:var(--sans);font-size:11px;letter-spacing:.05em;padding:6px 12px;cursor:pointer;border-radius:3px}
+nav button:hover{color:var(--txt);border-color:var(--lit)}
+nav button[aria-selected=true]{color:var(--hi);border-color:var(--lit);background:var(--panel)}
+.view{display:none}.view.on{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:8px;margin-top:12px}
+.pnl{background:var(--panel);border:1px solid var(--stroke);border-radius:5px;padding:9px 11px;min-width:0}
+.lb{font-size:9px;letter-spacing:.09em;color:var(--dim);margin:0 0 7px;text-transform:uppercase}
+.rw{font-family:var(--mono);font-size:9.5px;line-height:1.6;color:var(--txt);word-break:break-word}
+.ok{color:var(--ok)}.wn{color:var(--warn)}.cr{color:var(--crit)}.h{color:var(--hi)}
+.bar{height:3px;background:var(--stroke);border-radius:2px;margin-top:7px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--crit)}
+.note{font-size:10px;color:var(--dim);margin:14px 0 0;padding-left:9px;border-left:1px solid var(--stroke)}
+h2{font-size:12px;font-weight:500;color:var(--hi);letter-spacing:.06em;text-transform:uppercase;margin:22px 0 8px}
+p.body{font-size:12.5px;max-width:74ch;margin:0 0 10px}
+svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:9.5px;color:var(--dim);margin-top:8px}
+.legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle}
+select{background:var(--panel);color:var(--hi);border:1px solid var(--stroke);border-radius:3px;padding:6px 9px;font-family:var(--sans);font-size:11.5px;min-width:230px}
+button.run{background:var(--panel);color:var(--hi);border:1px solid var(--lit);border-radius:3px;padding:6px 14px;font-family:var(--sans);font-size:11.5px;cursor:pointer;margin-left:6px}
+button.run:hover{border-color:var(--ok)}
+table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:10px;table-layout:fixed}
+th{text-align:left;font-weight:500;color:var(--dim);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:5px 6px;border-bottom:1px solid var(--stroke)}
+td{padding:5px 6px;border-bottom:1px solid #171d28;color:var(--txt);vertical-align:top}
+tr.dim td{opacity:.32}
+tr.lit td{background:#151b26}
+.chip{display:inline-block;font-size:8.5px;letter-spacing:.05em;padding:1px 6px;border-radius:2px;border:1px solid}
+.c-t{color:var(--crit);border-color:#3a2226}.c-o{color:var(--warn);border-color:#3a2f1e}.c-m{color:var(--ok);border-color:#1d3730}
+.count{font-family:var(--mono);font-size:11px;color:var(--hi);margin-top:12px;padding:9px 11px;background:var(--panel);border:1px solid var(--stroke);border-radius:5px}
+footer{margin-top:34px;padding-top:12px;border-top:1px solid var(--stroke);font-size:8.5px;letter-spacing:.05em;color:#3f4a5c}
+@keyframes puls{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes trav{to{stroke-dashoffset:-40}}
+@keyframes bl{0%,100%{opacity:.45}50%{opacity:.95}}
+.nd{animation:puls 3s ease-in-out infinite}
+.dash{stroke-dasharray:3 6;animation:trav 2.4s linear infinite}
+.hb{animation:bl 1.9s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.nd,.dash,.hb{animation:none}}
+
+/* ---- addendum two: tooling layer, change management, control anatomy ---- */
+.tscroll{overflow-x:auto;margin-top:10px}
+.tw{position:relative;min-width:730px}
+.tw table{margin-top:0}
+.stopv{position:absolute;left:78%;top:0;bottom:0;border-left:1px dashed var(--crit);pointer-events:none}
+.stoplbl{position:absolute;left:78%;top:34px;margin-left:-13px;writing-mode:vertical-rl;text-orientation:mixed;font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--crit);pointer-events:none}
+tr.scn{cursor:pointer}
+tr.scn:hover td{background:#151b26}
+tr.scn td.sid{color:var(--hi)}
+tr.scn td.stop{color:var(--hi)}
+tr.det{display:none}
+tr.det.open{display:table-row}
+tr.det td{padding:0}
+.dc{padding:9px 11px 10px;background:#0f131b;border-left:2px solid var(--lit)}
+.dc p{margin:0 0 6px;font-size:10px}
+.dc p:last-child{margin-bottom:0}
+.dk{color:var(--dim);letter-spacing:.07em;text-transform:uppercase;font-size:8.5px;margin-right:6px}
+.dc .mods{font-family:var(--mono);font-size:9.5px;color:var(--txt)}
+.never{margin-top:14px}
+.never ul{margin:7px 0 0;padding-left:16px}
+.never li{font-size:11px;margin-bottom:3px}
+.steps{display:flex;flex-wrap:wrap;gap:4px;margin:12px 0 4px}
+.steps span{flex:1;min-width:70px;text-align:center;font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;padding:8px 3px;background:var(--panel);border:1px solid var(--stroke);border-radius:3px;color:var(--txt)}
+.steps span i{display:block;font-style:normal;font-family:var(--mono);font-size:8px;color:var(--dim);margin-bottom:2px}
+tr.skip td{background:#161311}
+tr.skip td:first-child{border-left:2px solid var(--warn)}
+.c-s{color:var(--warn);border-color:#3a2f1e}
+.qa{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:8px;margin-top:10px}
+.qa .qn{font-family:var(--mono);font-size:9px;color:var(--dim)}
+.qa .qq{font-size:10.5px;color:var(--hi);margin:2px 0 5px}
+.qa .qf{font-family:var(--mono);font-size:9px;color:var(--ok);word-break:break-all}
+.qa .qv{font-size:10px;margin-top:5px;padding-top:5px;border-top:1px solid var(--stroke)}
+.spine{margin-top:12px;padding:11px 13px;background:#140f12;border:1px solid #3a2226;border-radius:5px}
+.spine h3{margin:0 0 6px;font-size:11px;font-weight:500;color:var(--crit);letter-spacing:.05em;text-transform:uppercase}
+.spine p{margin:0 0 7px;font-size:11.5px;max-width:74ch}
+.spine ul{margin:0;padding-left:16px;font-size:11px}
+.miss{color:var(--crit);font-style:italic}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:2px}
+.d1{background:#2f6b57}.d0{background:#5a2b2c}
+.pv{font-family:var(--mono);font-size:9px}
+tr.ctl{cursor:pointer}
+tr.ctl:hover td{background:#151b26}
+@media (max-width:560px){.strip{gap:10px;font-size:9px}h1{font-size:14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+<h1>Operations Control Plane — compliance for a multi-jurisdiction platform licensor</h1>
+<p>Design exercise by Mary Ogola · <a href="mailto:maryogolla040@gmail.com">maryogolla040@gmail.com</a> · <a href="https://linkedin.com/in/mogola">linkedin.com/in/mogola</a> · built from public sources only</p>
+</header>
+
+<div class="strip">
+<span>MARKETS <b>11</b> verified</span>
+<span>REQUIREMENTS <b>17</b></span>
+<span>CONTROLS <b>16</b></span>
+<span>UNPROVABLE <b class="cr" id="upv">5</b></span>
+<span>GAPS <b class="cr">1</b></span>
+<span>PARTIAL <b class="wn">3</b></span>
+<span>STALE <b class="wn">4</b></span>
+<span>SCENARIOS <b>14</b></span>
+<span>SCENARIO <b class="ok">KE-2025</b></span>
+</div>
+
+<nav role="tablist">
+<button role="tab" aria-selected="true" data-v="plane">CONTROL PLANE</button>
+<button role="tab" aria-selected="false" data-v="arch">ARCHITECTURE</button>
+<button role="tab" aria-selected="false" data-v="auto">AUTOMATION LAYER</button>
+<button role="tab" aria-selected="false" data-v="chg">CHANGE MANAGEMENT</button>
+<button role="tab" aria-selected="false" data-v="anat">CONTROL ANATOMY</button>
+<button role="tab" aria-selected="false" data-v="sim">CHANGE SIMULATOR</button>
+<button role="tab" aria-selected="false" data-v="approach">APPROACH</button>
+</nav>
+
+<!-- ============ CONTROL PLANE ============ -->
+<section class="view on" id="plane">
+<p class="body">Each node is a market. Each line is a <b style="color:var(--hi);font-weight:500">shared control</b> — two markets joined by a line depend on the same control, so changing it for one changes it for both. Red lines carry <b style="color:var(--crit);font-weight:500">global</b> (unscoped) controls. Those are the propagation risk.</p>
+
+<svg viewBox="0 0 660 210" role="img" aria-label="Market graph showing shared control dependencies between markets">
+<g stroke="#2d3f56" stroke-width="0.6" fill="none" opacity=".5">
+<path d="M330 105 L175 58"/><path d="M330 105 L145 125"/><path d="M330 105 L200 172"/>
+<path d="M330 105 L472 52"/><path d="M330 105 L515 112"/><path d="M330 105 L452 168"/>
+<path d="M175 58 L472 52"/><path d="M145 125 L200 172"/><path d="M515 112 L452 168"/>
+<path d="M175 58 L145 125"/><path d="M472 52 L515 112"/>
+</g>
+<g class="dash" fill="none" stroke="#e8615f" stroke-width="1.2" opacity=".85">
+<path d="M330 105 L472 52"/><path d="M330 105 L515 112"/>
+</g>
+<g class="dash" fill="none" stroke="#5dcaa5" stroke-width="1" opacity=".65" style="animation-duration:3.6s">
+<path d="M330 105 L175 58"/><path d="M330 105 L200 172"/>
+</g>
+<circle cx="330" cy="105" r="17" fill="none" stroke="#efaa3c" stroke-width="0.6" opacity=".35"/>
+<circle class="nd" cx="330" cy="105" r="9.5" fill="#efaa3c" style="animation-duration:2.1s"/>
+<text x="330" y="134" text-anchor="middle" font-size="10" fill="#efaa3c">kenya</text>
+<circle class="nd" cx="472" cy="52" r="6.5" fill="#e8615f" style="animation-duration:2.7s"/><text x="472" y="37" text-anchor="middle" font-size="9" fill="#8b97ab">ghana</text>
+<circle class="nd" cx="515" cy="112" r="6.5" fill="#e8615f" style="animation-duration:3.2s"/><text x="515" y="132" text-anchor="middle" font-size="9" fill="#8b97ab">nigeria</text>
+<circle class="nd" cx="175" cy="58" r="5.5" fill="#5dcaa5" style="animation-duration:2.9s"/><text x="175" y="43" text-anchor="middle" font-size="9" fill="#8b97ab">tanzania</text>
+<circle class="nd" cx="145" cy="125" r="5.5" fill="#5dcaa5" style="animation-duration:3.5s"/><text x="145" y="145" text-anchor="middle" font-size="9" fill="#8b97ab">uganda</text>
+<circle class="nd" cx="200" cy="172" r="5.5" fill="#5dcaa5" style="animation-duration:2.4s"/><text x="200" y="191" text-anchor="middle" font-size="9" fill="#8b97ab">rwanda</text>
+<circle class="nd" cx="452" cy="168" r="5.5" fill="#5dcaa5" style="animation-duration:3.8s"/><text x="452" y="187" text-anchor="middle" font-size="9" fill="#8b97ab">benin</text>
+<text x="600" y="108" font-size="9" fill="#5f6b80">+4 verified</text>
+</svg>
+
+<div class="legend">
+<span><i style="background:#efaa3c"></i>active scenario</span>
+<span><i style="background:#e8615f"></i>global control shared</span>
+<span><i style="background:#5dcaa5"></i>market-scoped</span>
+<span>node size = requirement count</span>
+</div>
+
+<div class="grid">
+<div class="pnl"><p class="lb">Change log</p><div class="rw">
+08:14 <span class="wn">detect</span> KE act 2025<br>
+08:14 assess 6 surfaces<br>
+08:15 <span class="cr">warn</span> 2 global ctrl<br>
+08:15 classify structural<br>
+08:16 <span class="ok">seq</span> by exposure</div></div>
+
+<div class="pnl"><p class="lb">Blast radius</p><div class="rw">
+requirements <span class="wn">6</span><br>
+controls <span class="wn">6</span><br>
+market-scoped 4<br>
+global <span class="cr">2</span><br>
+markets at risk <span class="cr">2</span></div>
+<div class="bar"><i style="width:33%"></i></div></div>
+
+<div class="pnl"><p class="lb">Exception heat</p>
+<div style="display:flex;gap:2px;align-items:flex-end;height:34px;margin-bottom:5px">
+<div class="hb" style="flex:1;height:38%;background:#5dcaa5"></div>
+<div class="hb" style="flex:1;height:62%;background:#5dcaa5;animation-delay:.2s"></div>
+<div class="hb" style="flex:1;height:88%;background:#efaa3c;animation-delay:.45s"></div>
+<div class="hb" style="flex:1;height:52%;background:#5dcaa5;animation-delay:.1s"></div>
+<div class="hb" style="flex:1;height:100%;background:#e8615f;animation-delay:.62s"></div>
+<div class="hb" style="flex:1;height:28%;background:#5dcaa5;animation-delay:.32s"></div>
+</div><div class="rw">top code <span class="cr">MissingDocument</span></div></div>
+
+<div class="pnl"><p class="lb">Control heartbeat</p><div class="rw">
+CTL-KYC-01 <span class="ok">ok</span><br>
+CTL-TAX-01 <span class="ok">ok</span><br>
+CTL-ADV-03 <span class="cr">silent 41d</span><br>
+CTL-PP-02 <span class="wn">partial</span><br>
+CTL-TECH-01 <span class="ok">ok</span></div></div>
+
+<div class="pnl"><p class="lb">Escalation</p><div class="rw">
+raised today 14<br>
+routed to human <span class="ok">11</span><br>
+auto-resolved 3<br>
+rate <span class="ok">79%</span><br>
+<span style="color:var(--dim)">falling rate = warning</span></div></div>
+
+<div class="pnl"><p class="lb">Register health</p><div class="rw">
+no owner <span class="ok">0</span><br>
+no evidence <span class="wn">2</span><br>
+unmapped control <span class="ok">0</span><br>
+unprovable ctrl <span class="cr">5/16</span><br>
+verified source 11/17<br>
+illustrative <span class="wn">6</span></div></div>
+</div>
+
+<p class="note"><b style="color:var(--hi);font-weight:500">The negatives are the finding.</b> A control with no evidence that it operated is indistinguishable from a control that has stopped operating. CTL-ADV-03 has not run in 41 days and nothing errored.</p>
+</section>
+
+<!-- ============ ARCHITECTURE ============ -->
+<section class="view" id="arch">
+<p class="body">Four lanes. The middle one is named: <b style="color:var(--hi);font-weight:500">Make.com scenarios, SCN-01 to SCN-14</b>, and every automation path carries its number. The red line is where automation stops. Everything to the right of it is a person.</p>
+
+<svg viewBox="0 0 660 400" role="img" aria-label="Four-lane architecture: ingest feeds Make.com scenarios, which write to the system of record and route to the human layer. A vertical divider marks where automation stops.">
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.4" stroke-linecap="round"/></marker>
+<path id="q1" d="M102 57 L136 72" fill="none"/>
+<path id="q2" d="M102 91 L136 104" fill="none"/>
+<path id="q3" d="M102 125 L136 152" fill="none"/>
+<path id="q4" d="M290 236 C 360 270 420 250 474 214" fill="none"/>
+</defs>
+
+<text x="14" y="26" font-size="9" fill="#5f6b80" letter-spacing="1">INGEST</text>
+<text x="140" y="26" font-size="9" fill="#5f6b80" letter-spacing="1">TOOLING — MAKE.COM</text>
+<text x="340" y="26" font-size="9" fill="#5f6b80" letter-spacing="1">SYSTEM OF RECORD</text>
+<text x="486" y="26" font-size="9" fill="#5f6b80" letter-spacing="1">HUMAN LAYER</text>
+
+<g fill="#12161f" stroke="#232b3a" stroke-width="0.6">
+<rect x="14" y="44" width="88" height="26" rx="4"/><rect x="14" y="78" width="88" height="26" rx="4"/>
+<rect x="14" y="112" width="88" height="26" rx="4"/><rect x="14" y="146" width="88" height="26" rx="4"/>
+</g>
+<g font-size="8" fill="#8b97ab" text-anchor="middle">
+<text x="58" y="61">platform events</text><text x="58" y="95">verification logs</text>
+<text x="58" y="129">payment records</text><text x="58" y="163">regulator feeds</text>
+</g>
+
+<rect x="140" y="40" width="150" height="210" rx="5" fill="#12161f" stroke="#2d3f56" stroke-width="0.8"/>
+<text x="148" y="58" font-size="10" fill="#c9d4e4">Make.com scenarios</text>
+<g font-size="7.5" fill="#8b97ab" font-family="ui-monospace,Menlo,monospace">
+<text x="148" y="76">SCN-01 case creation</text>
+<text x="148" y="92">SCN-02 risk notification</text>
+<text x="148" y="108">SCN-03 document follow-up</text>
+<text x="148" y="124">SCN-04 deadline escalation</text>
+<text x="148" y="140">SCN-05 audit log</text>
+<text x="148" y="156">SCN-06 evidence compilation</text>
+<text x="148" y="172">SCN-07 expiry watch</text>
+<text x="148" y="188">SCN-08 heartbeat</text>
+<text x="148" y="204">SCN-09 staleness sweep</text>
+<text x="148" y="220">SCN-10 reconciliation</text>
+</g>
+<text x="148" y="234" font-size="6.5" fill="#5f6b80">SCN-11…14 carry regulatory change</text>
+<text x="148" y="244" font-size="6.5" fill="#5f6b80">SCN-01 · 05 complete with no human</text>
+
+<g fill="#12161f" stroke="#232b3a" stroke-width="0.6">
+<rect x="340" y="60" width="120" height="34" rx="5"/><rect x="340" y="110" width="120" height="34" rx="5"/>
+<rect x="340" y="160" width="120" height="34" rx="5"/>
+</g>
+<g text-anchor="middle">
+<text x="400" y="77" font-size="9" fill="#c9d4e4">requirements</text><text x="400" y="88" font-size="7.5" fill="#5f6b80">register + controls</text>
+<text x="400" y="127" font-size="9" fill="#c9d4e4">evidence store</text><text x="400" y="138" font-size="7.5" fill="#5f6b80">tagged at capture</text>
+<text x="400" y="177" font-size="9" fill="#c9d4e4">immutable log</text><text x="400" y="188" font-size="7.5" fill="#5f6b80">who · what · when · why</text>
+</g>
+
+<g stroke="#2d3f56" stroke-width="0.6" fill="none" opacity=".8">
+<path d="M102 57 L134 72" marker-end="url(#ar)"/><path d="M102 91 L134 104" marker-end="url(#ar)"/>
+<path d="M102 125 L134 152" marker-end="url(#ar)"/><path d="M102 159 L134 186" marker-end="url(#ar)"/>
+</g>
+<g font-size="6.5" fill="#5f6b80" font-family="ui-monospace,Menlo,monospace">
+<text x="104" y="52">SCN-01</text><text x="104" y="86">SCN-08</text>
+<text x="104" y="120">SCN-10</text><text x="104" y="154">SCN-11</text>
+</g>
+
+<g stroke="#2d3f56" stroke-width="0.6" fill="none" opacity=".8">
+<path d="M290 96 L336 80" marker-end="url(#ar)"/><path d="M290 150 L336 130" marker-end="url(#ar)"/>
+<path d="M290 200 L336 180" marker-end="url(#ar)"/>
+</g>
+<g font-size="6" fill="#5f6b80" text-anchor="middle" font-family="ui-monospace,Menlo,monospace">
+<text x="313" y="80">SCN-01·04·09</text><text x="313" y="132">SCN-06·07</text><text x="313" y="182">SCN-05</text>
+</g>
+
+<path d="M472 18 L472 372" stroke="#e8615f" stroke-width="1" stroke-dasharray="4 4" fill="none" opacity=".9"/>
+<text x="464" y="200" font-size="8" fill="#e8615f" letter-spacing="1.4" text-anchor="middle" transform="rotate(-90 464 200)">AUTOMATION STOPS HERE</text>
+
+<g stroke="#232b3a" stroke-width="0.6">
+<rect x="484" y="52" width="168" height="28" rx="4" fill="#12161f"/>
+<rect x="491" y="88" width="161" height="28" rx="4" fill="#12161f"/>
+<rect x="498" y="124" width="154" height="28" rx="4" fill="#12161f"/>
+<rect x="505" y="160" width="147" height="28" rx="4" fill="#12161f" stroke="#e8615f"/>
+<rect x="512" y="196" width="140" height="28" rx="4" fill="#12161f"/>
+</g>
+<g font-size="7">
+<text x="490" y="70" fill="#5f6b80">TIER 0</text><text x="524" y="70" fill="#8b97ab">auto-close · admin only</text>
+<text x="497" y="106" fill="#5f6b80">TIER 1</text><text x="531" y="106" fill="#8b97ab">operations · missing info</text>
+<text x="504" y="142" fill="#5f6b80">TIER 2</text><text x="538" y="142" fill="#8b97ab">compliance owner</text>
+<text x="511" y="178" fill="#e8615f">TIER 3</text><text x="545" y="178" fill="#c9d4e4">designated officer</text>
+<text x="518" y="214" fill="#5f6b80">TIER 4</text><text x="552" y="214" fill="#8b97ab">licensee · counsel · regulator</text>
+</g>
+
+<path d="M290 236 C 360 270 420 250 476 214" fill="none" stroke="#e8615f" stroke-width="1.1" marker-end="url(#ar)"/>
+<text x="276" y="278" font-size="7" fill="#e8615f" font-family="ui-monospace,Menlo,monospace">SCN-02·03·04·06·07·08·09·10</text>
+<text x="276" y="288" font-size="7" fill="#e8615f">routing only — no disposal</text>
+<text x="148" y="266" font-size="7" fill="#efaa3c">SCN-03 chases twice, then stops</text>
+
+<rect x="484" y="252" width="168" height="28" rx="4" fill="#12161f" stroke="#232b3a" stroke-width="0.6"/>
+<text x="568" y="270" text-anchor="middle" font-size="9" fill="#c9d4e4">decision + rationale</text>
+<path d="M568 280 L568 330 L400 330 L400 198" fill="none" stroke="#5dcaa5" stroke-width="0.8" opacity=".75" marker-end="url(#ar)"/>
+<text x="412" y="344" font-size="7" fill="#5dcaa5">human decision written back · SCN-05 records who, what, when and why</text>
+
+<circle r="2.5" fill="#5dcaa5"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#q1"/></animateMotion></circle>
+<circle r="2.5" fill="#5dcaa5" visibility="hidden"><set attributeName="visibility" to="visible" begin="0.8s"/><animateMotion dur="3.2s" begin="0.8s" repeatCount="indefinite"><mpath href="#q2"/></animateMotion></circle>
+<circle r="2.5" fill="#efaa3c" visibility="hidden"><set attributeName="visibility" to="visible" begin="1.4s"/><animateMotion dur="2.8s" begin="1.4s" repeatCount="indefinite"><mpath href="#q3"/></animateMotion></circle>
+<circle r="3.5" fill="#e8615f" visibility="hidden"><set attributeName="visibility" to="visible" begin="1.1s"/><animateMotion dur="3.4s" begin="1.1s" repeatCount="indefinite"><mpath href="#q4"/></animateMotion></circle>
+</svg>
+
+<p class="note"><b style="color:var(--hi);font-weight:500">Automate execution, not accountability.</b> Execution is what a scenario does. Accountability is who answers for it. A workflow tool can hold the first and can never hold the second. Tier 3 receives routing and nothing else — no automated request, no auto-close. If a case has a substantive concern, an automated document request tells the counterparty exactly what would make the problem disappear. The corollary: automation should make escalation <i>easier</i>, not rarer. A falling escalation rate is a warning, not an improvement.</p>
+</section>
+
+<!-- ============ AUTOMATION LAYER ============ -->
+<section class="view" id="auto">
+<p class="body">Where Make actually sits. Ten scenarios carry the operational load and four more carry regulatory change. Each row states its trigger, what it does, what it writes to, and — the column that matters — where it stops. Click any row for its modules, its failure mode, and what happens if the scenario itself breaks.</p>
+
+<div class="tscroll"><div class="tw">
+<div class="stopv"></div><div class="stoplbl">automation stops here</div>
+<table id="stbl"><thead><tr>
+<th style="width:14%">Scenario</th><th style="width:15%">Trigger</th><th style="width:31%">What it does</th><th style="width:18%">Writes to</th><th style="width:22%">Stops at</th>
+</tr></thead><tbody></tbody></table>
+</div></div>
+
+<p class="note">Every row crosses the line. Nothing crosses back. A scenario may package a case, route it, chase it twice and log every step — and then it stops, because the next act is a judgement and a workflow tool cannot be accountable for one. <b style="color:var(--hi);font-weight:500">Automate execution, not accountability.</b></p>
+
+<div class="pnl never">
+<p class="lb">What must never be a scenario</p>
+<ul>
+<li>Deciding whether a discrepancy is acceptable</li>
+<li>Disposing a screening alert as true or false positive</li>
+<li>Accepting a risk</li>
+<li>Judging whether an expenditure is allowable</li>
+<li>Determining an intervention for a player showing markers of harm</li>
+<li>Closing a Tier 3 exception</li>
+<li>Approving anything that requires four eyes</li>
+</ul>
+<p class="note" style="border:0;padding:0;margin-top:9px">Naming the exclusions is more convincing than listing the inclusions. Anything on this list that appears in a scenario is a design defect, not a feature.</p>
+</div>
+</section>
+
+<!-- ============ CHANGE MANAGEMENT ============ -->
+<section class="view" id="chg">
+<p class="body">Ten steps to remember, thirteen stages to interrogate. The four stages shaded amber are the ones people skip — and they are where change management actually fails, because everybody models detection and implementation and then forgets that people have to be trained and that somebody must track the effective date.</p>
+
+<div class="steps">
+<span><i>01</i>Understand</span><span><i>02</i>Map</span><span><i>03</i>Design</span><span><i>04</i>Assign</span><span><i>05</i>Build</span>
+<span><i>06</i>Test</span><span><i>07</i>Train</span><span><i>08</i>Launch</span><span><i>09</i>Monitor</span><span><i>10</i>Evidence</span>
+</div>
+
+<div class="tscroll"><div class="tw">
+<table id="gtbl"><thead><tr>
+<th style="width:5%">#</th><th style="width:24%">Stage</th><th style="width:16%">Owner</th><th style="width:32%">Automation</th><th style="width:23%">Evidence produced</th>
+</tr></thead><tbody></tbody></table>
+</div></div>
+
+<h2>The four stages people skip</h2>
+<p class="body"><b style="color:var(--warn);font-weight:500">Stage 8 — SOP update.</b> A process change without a documentation change creates a gap between what people are told to do and what they must do. SCN-12 raises an exception on any workflow version bump with no corresponding SOP version bump. That single automation prevents the most common documentation failure there is.</p>
+<p class="body"><b style="color:var(--warn);font-weight:500">Stage 9 — training.</b> A control that depends on people behaving differently does not exist until those people know. Training completion is evidence, not admin. An auditor will ask who was trained and when, and "we sent an email" is not an answer.</p>
+<p class="body"><b style="color:var(--warn);font-weight:500">Stage 11 — effective-date tracking.</b> Regulations have commencement dates. Being ready two weeks late is a breach even if the work was excellent. It gets its own countdown and its own blocking alert, separate from ordinary project tracking.</p>
+<p class="body"><b style="color:var(--warn);font-weight:500">Stage 13 — post-launch monitoring.</b> A new control is the most likely control to fail silently, because nobody has seen it run enough times to know what normal looks like. The heartbeat runs at elevated frequency for the first 90 days.</p>
+</section>
+
+<!-- ============ CONTROL ANATOMY ============ -->
+<section class="view" id="anat">
+<p class="body">The register shows controls as rows. A row is not a control. These are the ten questions that make one real — answered in full for CTL-KYC-01, then applied as a template to every control in the register, where the unanswered questions are the finding.</p>
+
+<div class="qa" id="qgrid"></div>
+
+<div class="spine">
+<h3>Question 9 is the spine</h3>
+<p>Most controls fail it, and failing it means the control is unprovable — which in an audit is indistinguishable from absent. Answering it requires three things to exist at the moment the control runs:</p>
+<ul>
+<li><b style="color:var(--hi);font-weight:500">What happened</b> — the log entry</li>
+<li><b style="color:var(--hi);font-weight:500">Who or what did it</b> — the actor</li>
+<li><b style="color:var(--hi);font-weight:500">What it produced</b> — the evidence artifact, dated and tagged to the requirement</li>
+</ul>
+<p style="margin-top:7px;margin-bottom:0">If any of the three is missing, the control cannot be evidenced retrospectively. <b style="color:var(--crit);font-weight:500"><span id="upv2">5</span> of 16 controls in this register are unprovable today.</b> That number is a genuinely uncomfortable metric and it should be.</p>
+</div>
+
+<h2>CTL-KYC-01 — worked in full</h2>
+<p class="body" style="color:var(--dim);font-size:11.5px">Identity verified before account activation. All ten questions answered concretely — this is what a control looks like when it is finished.</p>
+<div class="tscroll"><div class="tw" style="min-width:560px">
+<table id="ktbl"><thead><tr>
+<th style="width:5%">#</th><th style="width:23%">Field</th><th style="width:72%">CTL-KYC-01</th>
+</tr></thead><tbody></tbody></table>
+</div></div>
+
+<h2>Every other control — same template, collapsed</h2>
+<p class="body" style="color:var(--dim);font-size:11.5px">One row per control, one dot per question. Red is unanswered. Click a row to see what is missing.</p>
+<div class="tscroll"><div class="tw" style="min-width:600px">
+<table id="ctbl"><thead><tr>
+<th style="width:16%">Control</th><th style="width:44%">What it does</th><th style="width:25%">Q1 … Q10</th><th style="width:15%">Provable</th>
+</tr></thead><tbody></tbody></table>
+</div></div>
+<p class="note">The gaps are the finding, exactly as with the register. A control that cannot answer questions 4, 8 and 9 — where evidence lives, what gets logged, and how you prove it operated — produces nothing an auditor can inspect six months later, however well it runs today.</p>
+</section>
+
+<!-- ============ SIMULATOR ============ -->
+<section class="view" id="sim">
+<p class="body">A law changes in one market. The register turns "what does this affect?" from an investigation into a query.</p>
+<div>
+<select id="pick">
+<option value="ke">Kenya — Gambling Control Act 2025 (real, sourced)</option>
+<option value="fmt">New monthly reporting format (synthetic)</option>
+<option value="dep">Mandatory per-player deposit limit (synthetic)</option>
+</select>
+<button class="run" id="go">RUN</button>
+</div>
+<p id="desc" class="body" style="margin-top:12px;color:var(--dim);font-size:11.5px"></p>
+<table id="tbl"><thead><tr>
+<th style="width:26%">Surface</th><th style="width:34%">Change required</th><th style="width:15%">Class</th><th style="width:13%">Scope</th><th style="width:12%">Risk</th>
+</tr></thead><tbody></tbody></table>
+<div class="count" id="cnt">Press RUN to compute the blast radius.</div>
+<p class="note" id="warn" style="display:none"></p>
+</section>
+
+<!-- ============ APPROACH ============ -->
+<section class="view" id="approach">
+<h2>The framing</h2>
+<p class="body">A platform licensor typically holds <b style="color:var(--hi);font-weight:500">no gaming licence and no customer funds</b> — its local partners hold those. So its obligation is not "keep our licence." It is: ensure the platform and the processes around it let each licensee satisfy what their regulator requires, across every market at once, without a change made for one market silently breaking another.</p>
+<p class="body">That is not a monitoring problem. It is a requirements-mapping and change-propagation problem, which is an operations discipline.</p>
+
+<h2>Three obligation buckets</h2>
+<p class="body"><b style="color:var(--hi);font-weight:500">Ours</b> — the licensor must do it. <b style="color:var(--hi);font-weight:500">Theirs</b> — the licensee must do it; we track that they can. <b style="color:var(--warn);font-weight:500">Ours to enable</b> — the obligation lands on the licensee but is unmeetable without a platform capability.</p>
+<p class="body">The third bucket is where failures originate, because nobody owns it by default. A licensee failing an audit because the platform could not produce a required report is a commercial and reputational problem for the licensor even though the legal duty was never theirs.</p>
+
+<h2>Two principles</h2>
+<p class="body"><b style="color:var(--hi);font-weight:500">Automate execution, not accountability.</b> Execution is what a scenario does; accountability is who answers for it. A workflow tool can hold the first and can never hold the second. Status, routing, reminders, evidence capture, escalation triggers, report assembly — automate all of it. Whether a discrepancy is acceptable, whether an alert is a true match, whether to accept a risk — those stay with a person who holds the authority. The <b style="color:var(--hi);font-weight:500">automation layer</b> tab states the boundary scenario by scenario.</p>
+<p class="body"><b style="color:var(--hi);font-weight:500">Audit preparation becomes continuous audit readiness.</b> If evidence is captured as activity happens, an audit is a query. If it is reconstructed afterwards from statements, inboxes and memory, an audit is a crisis. The difference is entirely process design.</p>
+
+<h2>Design and operating effectiveness are different tests</h2>
+<p class="body">A control can be perfectly designed and never actually run. Testing must cover both. The dangerous quadrant is a control running reliably that checks the wrong thing — that is false assurance, and testing operation alone will never find it.</p>
+
+<h2>Exception, incident, breach</h2>
+<p class="body">An <b style="color:var(--hi);font-weight:500">exception</b> means a control fired — that is evidence it works. An <b style="color:var(--hi);font-weight:500">incident</b> means a control failed to operate or was bypassed and we caught it. A <b style="color:var(--hi);font-weight:500">breach</b> means a requirement was not met. Rising exceptions with flat incidents is a healthy system. Few exceptions with occasional incidents means things are getting through.</p>
+
+<h2>What I bring, and what I would learn</h2>
+<p class="body">I have run compliance operations in three regulatory environments: KYC and KYB across three regions at a blockchain fintech, with compliance accuracy improved around 45% and no known breach through 3x client growth; grant and donor compliance at a nonprofit, where capturing evidence as activity happened cut audit-preparation effort roughly in half; and internal controls in current operations roles, including a revenue and data-integrity audit that recovered over $700,000 in unrecorded closed revenue.</p>
+<p class="body">I have not worked in iGaming. There is sector-specific regulation I would need to learn — certification and licensing processes, and formal regulatory horizon-scanning, are the areas where I have least direct experience. The operating discipline transfers: understand the requirement, translate it into a process, assign ownership, capture evidence, catch exceptions, escalate what needs judgement, and measure whether any of it works.</p>
+
+<h2>Tooling</h2>
+<p class="body">Deliberately low-code — Make.com and n8n for orchestration, Airtable for registers, Google Workspace for evidence. Compliance operations should not sit in an engineering queue: when a regulator changes a reporting format, the person who understands the requirement should be able to change the workflow that week. The trade-off is that low-code needs its own governance, because an undocumented automation nobody remembers building is a control nobody can test.</p>
+</section>
+
+<footer>ILLUSTRATIVE DATA · DESIGN EXERCISE FROM PUBLIC SOURCES · NOT LEGAL ADVICE · NOT AFFILIATED WITH OR ENDORSED BY ANY COMPANY REFERENCED</footer>
+</div>
+
+<script>
+var SC = {
+  ke: {
+    d: "Came into force 26 August 2025, replacing the Betting, Lotteries and Gaming Act (Cap. 131, 1966). Introduces separate licences for online bookmakers, lotteries and casinos; strengthens player protection, advertising, AML and responsible gambling requirements; sets a minimum online stake; establishes a new consolidated regulatory authority. Verify against primary sources before relying on any detail.",
+    r: [
+      ["Licence structure","Separate online licence types; register rows re-based on the new instrument","Structural","market","low"],
+      ["Identity and age verification","Player and minor protection strengthened; verification flows reviewed","Tightening","market","med"],
+      ["Stake configuration","Minimum online stake enforced at input","New obligation","market","low"],
+      ["Advertising controls","Messaging, age warnings and channel restrictions strengthened","Tightening","global","high"],
+      ["AML programme and reporting","Strengthened requirements under the new framework","Tightening","global","high"],
+      ["Regulator relationship","New authority; channels, contacts, submission formats","Structural","market","med"]
+    ],
+    w: "The two high-risk rows are the finding. Advertising runs through a shared creative pipeline and AML tooling is global. Tightening either for Kenya without market-scoping the change risks over-applying Kenyan rules to sixteen other markets, or under-applying and missing the requirement. What good looks like: the stake floor is a config value with a change log, the document-type list is per-market data, and the advertising rule set is a market-scoped ruleset. None require a code release, and each produces its own evidence trail."
+  },
+  fmt: {
+    d: "Synthetic scenario. A regulator mandates a new monthly submission format with different field granularity.",
+    r: [
+      ["Report assembly","Rebuild the monthly pack to the new schema","New obligation","market","med"],
+      ["Evidence tagging","Confirm existing evidence carries the fields the new format needs","Tightening","global","high"],
+      ["Submission channel","New portal and credentials","Structural","market","low"]
+    ],
+    w: "This scenario tests whether evidence was tagged well enough to be re-cut into a new shape. If evidence was captured only in the shape of the old report, a format change becomes a data-collection project rather than a query. That is the argument for tagging evidence to the requirement rather than to the report."
+  },
+  dep: {
+    d: "Synthetic scenario. A market mandates a per-player deposit limit with a cooling-off period on increases.",
+    r: [
+      ["Deposit limit enforcement","Enforce cap at transaction; cooling-off on increases, immediate on decreases","New obligation","global","high"],
+      ["Player communications","Notify affected players and surface current limit","New obligation","market","med"],
+      ["Reporting","Evidence that limits were applied and respected","New obligation","market","med"]
+    ],
+    w: "This is an Ours-to-enable scenario. The obligation lands on the licensee, but it is impossible without a platform capability, so it surfaces as platform backlog rather than a compliance checklist item. The limit logic being global is the risk: a cooling-off rule written for one market applies everywhere unless it is market-scoped."
+  }
+};
+
+function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+
+function run(){
+  var k=document.getElementById("pick").value, s=SC[k];
+  document.getElementById("desc").innerHTML=esc(s.d);
+  var tb=document.querySelector("#tbl tbody"); tb.innerHTML="";
+  var warn=document.getElementById("warn"); warn.style.display="none";
+  var g=0;
+  s.r.forEach(function(row,i){
+    var tr=document.createElement("tr");
+    tr.className="dim";
+    var cls=row[2]==="Structural"?"c-t":(row[2]==="New obligation"?"c-o":"c-m");
+    var risk=row[4]==="high"?'<span class="cr">HIGH</span>':(row[4]==="med"?'<span class="wn">med</span>':'<span class="ok">low</span>');
+    var scope=row[3]==="global"?'<span class="cr">global</span>':'<span class="ok">market</span>';
+    tr.innerHTML="<td>"+esc(row[0])+"</td><td>"+esc(row[1])+"</td><td><span class='chip "+cls+"'>"+esc(row[2])+"</span></td><td>"+scope+"</td><td>"+risk+"</td>";
+    tb.appendChild(tr);
+    if(row[3]==="global") g++;
+    setTimeout(function(){ tr.className = row[4]==="high" ? "lit" : ""; }, 160*(i+1));
+  });
+  var tot=s.r.length;
+  setTimeout(function(){
+    document.getElementById("cnt").innerHTML =
+      "1 change  →  <span class='h'>"+tot+"</span> surfaces affected  →  <span class='cr'>"+g+
+      "</span> shared control"+(g===1?"":"s")+" at propagation risk  →  <span class='cr'>"+
+      (g>0?g:0)+"</span> market"+(g===1?"":"s")+" that could be silently changed";
+    warn.innerHTML="<b style='color:var(--hi);font-weight:500'>Propagation risk.</b> "+esc(s.w);
+    warn.style.display="block";
+  }, 160*(tot+1));
+}
+
+document.getElementById("go").addEventListener("click", run);
+document.getElementById("pick").addEventListener("change", function(){
+  document.querySelector("#tbl tbody").innerHTML="";
+  document.getElementById("desc").textContent="";
+  document.getElementById("warn").style.display="none";
+  document.getElementById("cnt").textContent="Press RUN to compute the blast radius.";
+});
+
+Array.prototype.forEach.call(document.querySelectorAll("nav button"), function(b){
+  b.addEventListener("click", function(){
+    Array.prototype.forEach.call(document.querySelectorAll("nav button"), function(x){ x.setAttribute("aria-selected","false"); });
+    Array.prototype.forEach.call(document.querySelectorAll(".view"), function(v){ v.classList.remove("on"); });
+    b.setAttribute("aria-selected","true");
+    document.getElementById(b.dataset.v).classList.add("on");
+  });
+});
+/* ---------- addendum two: tooling layer ---------- */
+var SCN = [
+["SCN-01","case creation","New case event","Create record, assign owner from routing table, set SLA clock","Register: new row","No human — no judgement present",0,
+ "Webhook case.created → Router by market → Airtable create record → Formula SLA due date → Airtable update → Notify owner",
+ "A new market missing from the routing table: the case is created with no owner and nobody is waiting for it.",
+ "No cases are created at all. SCN-08 sees no evidence inside the interval and raises a silent-control alert."],
+["SCN-02","risk notification","Risk flag raised","Package the case, route by tier, notify the tier owner","Exception record","Officer decides. Tool never disposes.",1,
+ "Watch records risk_flag = true → Router by tier → Text aggregator builds the case pack → Notify tier owner → Airtable create exception",
+ "Tier mapping stale after a role change, so the pack routes to someone who has left.",
+ "Risk flags accumulate unrouted. SCN-09 surfaces exceptions carrying no notification timestamp."],
+["SCN-03","document follow-up","Required document missing","Request, wait, re-request once","Case: awaiting info","After 2 attempts — hard cap",1,
+ "Scheduler → Search status = awaiting_info → Filter attempts &lt; 2 → Email template → Increment attempt counter → Airtable update",
+ "The attempt counter is not incremented on send, producing an unbounded chase loop against a counterparty.",
+ "Chasing stops. Cases sit in awaiting-info until SCN-04 breaches the SLA and raises the tier."],
+["SCN-04","deadline escalation","SLA breached","Raise tier, notify owner and their manager","Tier change logged","Owner acts",1,
+ "Scheduler hourly → Search due &lt; now and status open → Formula next tier → Airtable update → Notify owner and manager → Append to log",
+ "SLA clock measured from creation rather than from last status change, escalating cases that are already moving.",
+ "Breaches pass unescalated and first appear in the monthly reconciliation, weeks late."],
+["SCN-05","audit log","Any status change","Record who, what, when, why","Immutable log","No human",0,
+ "Watch records any field change → Capture actor and reason → Hash previous entry → Append to data store",
+ "A change made directly in the interface with no reason captured, producing a log entry with no why.",
+ "The evidence chain has a hole. Every control's provable flag depends on this scenario, so it is the highest-consequence failure on the list."],
+["SCN-06","evidence compilation","Audit or report requested","Assemble tagged evidence into a dated pack","Evidence pack","Human signs off",1,
+ "Trigger on request → Search evidence by requirement tag → Filter date range → Create dated folder → Copy artifacts → Generate index → Notify signer",
+ "Evidence tagged to the report rather than to the requirement, so a new report shape finds nothing.",
+ "Audit packs must be assembled by hand — the exact failure this design exists to prevent."],
+["SCN-07","expiry watch","Daily schedule","Alert at 90/60/30/7 days; blocking exception at 0","Alert + exception","Owner renews",1,
+ "Scheduler daily → Search expiry within window → Router by threshold → Notify owner → At zero create blocking exception",
+ "Expiry dates stored as text, so the date arithmetic silently returns nothing and no alert ever fires.",
+ "A licence or certification lapses with no warning at all."],
+["SCN-08","heartbeat","Daily schedule","Check every control produced evidence within its interval","Silent-control alert","Human investigates",1,
+ "Scheduler daily → Iterate controls → Look up last evidence timestamp → Compare to expected interval → Create alert",
+ "A control with no expected interval set is skipped silently — the watcher has the same blind spot it exists to catch.",
+ "Silent controls stay silent. This scenario catches other scenarios failing, so it needs its own watcher."],
+["SCN-09","staleness sweep","Weekly schedule","Flag register rows past their review period","Staleness list","Owner re-verifies",1,
+ "Scheduler weekly → Search last_verified older than review period → Group by owner → One digest per owner",
+ "A digest per row rather than per owner, producing alert fatigue and then filtering.",
+ "The register drifts from reality with no signal that it has."],
+["SCN-10","reconciliation","Monthly schedule","Compare expected vs actual, flag variances over threshold","Variance report","Human explains every variance",1,
+ "Scheduler monthly → Pull platform totals → Pull register expectations → Compare → Filter variance over threshold → Build report → Notify",
+ "Threshold set so high that only catastrophic variances surface.",
+ "Discrepancies compound silently between months."],
+["SCN-11","regulator monitor","Daily schedule + licensee notification","Watch published sources, open a dated and sourced change record","Change record","Market owner confirms relevance",1,
+ "Scheduler daily → Fetch regulator sources → Diff against last seen → Create change record → Notify market owner",
+ "A regulator publishes to a channel nobody is watching, so the change is never detected.",
+ "Change detection falls back to the licensee telling us, which means we learn late."],
+["SCN-12","doc-update gap","Workflow version bump","Check for a matching SOP version bump inside the window","Documentation-gap exception","Documentation owner updates the SOP",1,
+ "Watch workflow version → Wait window → Search SOP versions → Filter no match → Create exception",
+ "A workflow changed without a version bump, so the check never runs and the gap is invisible.",
+ "Process and documentation drift apart — the most common documentation failure there is."],
+["SCN-13","training completion","Training assigned","Track completion per person, chase non-completers","Training completion record","Ops manager decides on non-completion",1,
+ "Trigger on assignment → Create per-person record → Scheduler chases incomplete → Update on completion → Digest to manager",
+ "Completion recorded at team level rather than per person, so the record cannot answer who was trained.",
+ "Training becomes an email nobody can evidence, and stage 9 produces no auditable artifact."],
+["SCN-14","effective-date countdown","Daily schedule","Count down to commencement; alert at 30/14/7/1 days","Readiness status vs date","Blocking at 0 — compliance ops decides",1,
+ "Scheduler daily → Search changes with future effective date → Formula days remaining → Router by threshold → Notify → At zero create blocking exception",
+ "Effective date captured as the publication date rather than the commencement date.",
+ "Readiness is tracked as an ordinary project and a commencement date passes unmet."]
+];
+
+function renderScn(){
+  var tb = document.querySelector("#stbl tbody");
+  SCN.forEach(function(s, i){
+    var tr = document.createElement("tr");
+    tr.className = "scn";
+    tr.setAttribute("tabindex","0");
+    var stop = s[6] ? "<span class='cr'>" + esc(s[5]) + "</span>" : "<span class='ok'>" + esc(s[5]) + "</span>";
+    tr.innerHTML = "<td class='sid'>" + esc(s[0]) + "<br><span style='color:var(--dim)'>" + esc(s[1]) + "</span></td>"
+      + "<td>" + esc(s[2]) + "</td><td>" + esc(s[3]) + "</td><td>" + esc(s[4]) + "</td>"
+      + "<td class='stop'>" + stop + "</td>";
+    tb.appendChild(tr);
+    var dt = document.createElement("tr");
+    dt.className = "det";
+    dt.innerHTML = "<td colspan='5'><div class='dc'>"
+      + "<p><span class='dk'>modules</span><span class='mods'>" + s[7] + "</span></p>"
+      + "<p><span class='dk'>failure mode</span>" + esc(s[8]) + "</p>"
+      + "<p><span class='dk'>if the scenario itself breaks</span>" + esc(s[9]) + "</p></div></td>";
+    tb.appendChild(dt);
+    function tog(){ dt.classList.toggle("open"); }
+    tr.addEventListener("click", tog);
+    tr.addEventListener("keydown", function(e){ if(e.key === "Enter" || e.key === " "){ e.preventDefault(); tog(); } });
+  });
+}
+
+/* ---------- addendum two: thirteen stages ---------- */
+var STG = [
+[1,"Change identified","Market owner","SCN-11 regulator monitor; licensee notification captured as a ticket","Change record, dated and sourced",0],
+[2,"Impact assessment","Compliance ops","Register query returns affected requirements and controls","Impact set",0],
+[3,"Affected products and processes identified","Compliance ops + product","Traverse control → process → product mapping","Affected-system list",0],
+[4,"Owners assigned","Compliance ops","Auto-assign from the ownership table, flag anything unowned","Assignment record",0],
+[5,"Requirements documented","Compliance ops","—","New or amended register rows",0],
+[6,"Workflows changed","Process owner","Scenario version bumped, change logged","Workflow diff",0],
+[7,"Product and system changes implemented","Product / platform","Config change logged automatically","Config diff + release note",0],
+[8,"SOPs and policies updated","Documentation owner","SCN-12 flags any process change with no matching doc update","Versioned SOP",1],
+[9,"Employees trained","Ops manager","SCN-13 tracks completion and chases non-completers","Training completion record per person",1],
+[10,"QA and UAT completed","Ops manager","Test cases generated from the requirement","Signed test evidence",0],
+[11,"Effective date tracked","Compliance ops","SCN-14 countdown; alert at 30/14/7/1 days, blocking at 0","Readiness status vs date",1],
+[12,"Evidence retained","Automatic","SCN-05 and SCN-06","Dated evidence chain",0],
+[13,"Post-launch monitoring","Compliance ops","SCN-08 heartbeat on new controls, elevated for 90 days","Operating-effectiveness record",1]
+];
+
+function renderStg(){
+  var tb = document.querySelector("#gtbl tbody");
+  STG.forEach(function(s){
+    var tr = document.createElement("tr");
+    if(s[5]) tr.className = "skip";
+    var name = esc(s[1]) + (s[5] ? " <span class='chip c-s'>OFTEN SKIPPED</span>" : "");
+    tr.innerHTML = "<td class='h'>" + s[0] + "</td><td>" + name + "</td><td>" + esc(s[2]) + "</td>"
+      + "<td>" + esc(s[3]) + "</td><td>" + esc(s[4]) + "</td>";
+    tb.appendChild(tr);
+  });
+}
+
+/* ---------- addendum two: control anatomy ---------- */
+var QS = [
+["How does the system identify these?","detection_method","A control that depends on someone noticing is not a control"],
+["Who reviews them?","reviewer_role","A role, not a person — people leave"],
+["What information must be collected?","required_inputs[]","Ambiguity at intake becomes rework downstream"],
+["Where is it stored?","evidence_location","If you cannot say where, you cannot prove it happened"],
+["Who approves?","approver_role + requires_four_eyes","Separates operation from authority"],
+["What happens while review is pending?","pending_state","Block, proceed, or proceed with limits? Unstated means inconsistent."],
+["What gets escalated?","escalation_trigger + tier","Written in advance, not decided under pressure"],
+["What gets logged?","log_events[]","Determines whether question 9 is answerable"],
+["How do we prove six months later that this worked?","assurance_method","The question that separates a real control from a described one"],
+["Can part of this be automated?","automation_scenarios[] + human_boundary","And the boundary must be explicit"]
+];
+
+var CTL = [
+["CTL-KYC-01","identity verified before account activation",[
+ "Activation is blocked at the platform until a verification result exists — the system cannot be bypassed by not noticing",
+ "Operations analyst reviews referrals; compliance owner reviews any override",
+ "Government ID, liveness check, name, date of birth, address, source country, sanctions screen result",
+ "Evidence store, tagged to REQ-KYC-01 and to the player ID, retained per market retention rule",
+ "Operations analyst approves a standard pass; compliance owner approves any override, four eyes required",
+ "Account stays unactivated. No deposit, no play, no partial state.",
+ "Any override, any document that fails authenticity checks, any sanctions hit — Tier 2, and a sanctions hit is Tier 3",
+ "Verification attempted, result, actor, documents received, override reason, activation timestamp",
+ "Query the log for the period, join to the evidence store, produce every activation with its verification artifact and actor. Sampling is possible because the population is complete.",
+ "SCN-01 creates the case, SCN-03 chases documents twice, SCN-05 logs. The disposition of a failed check is never automated."]],
+["CTL-KYC-02","ongoing due diligence refresh at risk-based intervals",[
+ "Scheduled sweep on risk tier and elapsed time","Operations analyst","Refreshed ID, updated source-of-funds statement, current risk score",
+ "Evidence store, tagged to the player and refresh cycle","Compliance owner for high-risk refresh","",
+ "Refresh overdue by 30 days — Tier 2","Refresh due, refresh completed, actor, outcome",
+ "Query refresh cycles per risk tier against the population due in the period","SCN-07 expiry watch, SCN-09 staleness sweep"]],
+["CTL-AML-01","transaction monitoring alert disposition",[
+ "Rules engine raises alerts on threshold and pattern rules","Operations analyst first line, compliance owner second","",
+ "Evidence store, tagged to the alert ID","Compliance owner signs every true-positive disposition","Account continues; funds hold applied above threshold",
+ "Any true positive, any alert open beyond SLA — Tier 3","Alert raised, assigned, disposition, rationale, actor, timestamp",
+ "Every alert in the period with its disposition, rationale and actor, reconciled to the rules that fired",
+ "SCN-02 packages and routes. Disposition is never automated."]],
+["CTL-AML-02","sanctions screening at onboarding and daily rescreen",[
+ "Screening runs at onboarding and daily against the full book","Operations analyst","Full name, date of birth, nationality, list version screened against",
+ "Evidence store, tagged to player and list version","Compliance owner disposes every match, four eyes on true matches",
+ "Account frozen pending disposition","Any potential match — Tier 3 immediately","Screen run, list version, hits, disposition, actor",
+ "Reproduce any day's screening from the retained list version and the player book",
+ "SCN-02 routes. Match disposition is never automated."]],
+["CTL-PP-01","self-exclusion honoured across all markets",[
+ "Exclusion register checked at login, deposit and marketing send","Operations analyst","Player ID, exclusion start and end, markets in scope",
+ "Evidence store, tagged to the exclusion record","Compliance owner approves any early reinstatement","Access blocked for the duration",
+ "Any contact reaching an excluded player — Tier 3","",
+ "Only assertable from platform state today; there is no per-attempt log to query",
+ "SCN-05 would log if the events were emitted. Reinstatement is never automated."]],
+["CTL-PP-02","deposit limit applied at transaction",[
+ "Limit checked at transaction time","Operations analyst","Player ID, limit value, requested amount, cooling-off state",
+ "Platform config change log only","Compliance owner approves limit-logic changes","",
+ "Limit bypassed or cooling-off not applied — Tier 2","Config changes only; individual applications are not logged","",
+ "SCN-05 logs the config change. Enforcement is platform-side."]],
+["CTL-ADV-03","advertising creative pre-approval",[
+ "","Compliance owner","Creative, channel, market, age-gating parameters","Shared creative drive, not tagged to a requirement",
+ "Compliance owner approves; designated officer approves market-first creatives","Creative cannot run until approved",
+ "Any creative running without recorded approval — Tier 3","","",
+ "None today. This is the control that has not run in 41 days."]],
+["CTL-TAX-01","gaming tax computed and filed",[
+ "Monthly close triggers computation from platform revenue data","Finance analyst","Gross gaming revenue, deductions, market rate, filing reference",
+ "Evidence store, tagged to REQ-TAX-01 and the filing period","Finance lead and compliance owner, four eyes","Filing held until both approvals recorded",
+ "Variance over threshold or a missed filing window — Tier 3","Computation inputs, result, approvals, submission receipt",
+ "Every filing with its inputs, both approvals and the regulator receipt, reconcilable to platform revenue",
+ "SCN-10 reconciliation, SCN-06 pack assembly. Variance explanation is never automated."]],
+["CTL-TECH-01","platform change control",[
+ "Every release captured from the deployment pipeline","Platform lead","Change description, affected markets, compliance impact assessment, rollback plan",
+ "Evidence store, tagged to the release and any affected requirement","Compliance owner approves any compliance-affecting change",
+ "Release blocked until assessment recorded","Compliance-affecting change released without assessment — Tier 3",
+ "Release, assessment, approver, deployment timestamp, rollback events",
+ "Every release in the period with its assessment and approver, reconciled to the deployment log",
+ "SCN-05 logs; SCN-12 raises the documentation gap. Impact judgement stays human."]],
+["CTL-TECH-02","RNG and platform certification currency",[
+ "Certificate expiry tracked against each market requirement","Platform lead","Certificate, scope, issuing body, expiry date","",
+ "Compliance owner","Certification treated as lapsed at expiry","Expiry inside 30 days — Tier 2; lapsed — Tier 3",
+ "Alerts raised, renewal submitted, certificate received",
+ "Certificates exist but are held by the testing house and the platform team, not in the evidence store",
+ "SCN-07 expiry watch"]],
+["CTL-REP-01","monthly regulatory submission",[
+ "Submission calendar per market drives the schedule","Compliance ops","Period data, market template, prior-period comparatives",
+ "Evidence store, tagged to the requirement and period","Compliance owner approves before submission","Submission held until approval recorded",
+ "Missed window or rejected submission — Tier 3","Pack assembled, approved, submitted, receipt, rejections",
+ "Every period with its pack, approval and regulator receipt","SCN-06 assembles, SCN-07 watches the window. Sign-off is human."]],
+["CTL-REP-02","incident notification within statutory window",[
+ "Incident raised by any tier or by SCN-08","Compliance owner","Incident description, affected markets, statutory window, notification text",
+ "Evidence store, tagged to the incident","Designated officer approves every notification","",
+ "Any incident with a statutory window — Tier 3 immediately","Incident raised, assessed, notified, receipt, actor",
+ "Every incident with its assessment, notification and timestamps against the statutory window",
+ "SCN-04 runs the window clock. Whether something is notifiable is never automated."]],
+["CTL-DAT-01","player data retention and deletion",[
+ "Retention clock per record class","Data owner","Record class, retention period, market rule, deletion confirmation",
+ "Deletion log in the platform","Data owner approves; compliance owner approves any exception","Record retained until the clock expires",
+ "Deletion blocked by a legal hold — Tier 2","Deletion due, executed, confirmed, actor","",
+ "SCN-07 watches the clock. Legal-hold judgement stays human."]],
+["CTL-DAT-02","access review for player data",[
+ "Quarterly review triggered from the access system","","Current access list, role mapping, joiners and leavers since last review",
+ "Evidence store, tagged to the review period","Compliance owner and platform lead, four eyes","Access unchanged during review",
+ "Access found outside role mapping — Tier 2","Review started, entries confirmed or revoked, actor, completion",
+ "Each quarterly review with its access list, decisions and both approvers","SCN-09 raises the review; revocation decisions stay human."]],
+["CTL-VEN-01","licensee onboarding due diligence",[
+ "New licensee record triggers the workflow","Compliance ops","Corporate documents, licence evidence, ownership, adverse-media screen",
+ "Evidence store, tagged to the licensee","Designated officer approves onboarding","Onboarding blocked until approval recorded",
+ "","Documents received, screens run, approval, actor",
+ "Every licensee with its diligence pack and approval","SCN-03 chases documents twice. Approval is never automated."]],
+["CTL-FIN-01","player funds segregation attestation",[
+ "Monthly attestation requested from each licensee","Finance analyst","","Evidence store, tagged to the licensee and period",
+ "Compliance owner reviews; designated officer escalates failures","",
+ "Missing or qualified attestation — Tier 3","Request sent, attestation received, review outcome, actor",
+ "Every period with its attestation and review outcome per licensee",
+ "SCN-03 chases, SCN-07 watches the window. Accepting a qualified attestation is never automated."]]
+];
+
+function andList(xs){
+  if(xs.length < 2) return xs.join("");
+  return xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1];
+}
+
+function provable(a){ return !!(a[3] && a[7] && a[8]); }
+
+function renderAnat(){
+  var g = document.getElementById("qgrid");
+  QS.forEach(function(q, i){
+    var d = document.createElement("div");
+    d.className = "pnl";
+    d.innerHTML = "<div class='qn'>Q" + (i + 1) + "</div><div class='qq'>" + esc(q[0]) + "</div>"
+      + "<div class='qf'>" + esc(q[1]) + "</div><div class='qv'>" + esc(q[2]) + "</div>";
+    if(i === 8){ d.style.borderColor = "#3a2226"; }
+    g.appendChild(d);
+  });
+
+  var kb = document.querySelector("#ktbl tbody");
+  CTL[0][2].forEach(function(ans, i){
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td class='h'>" + (i + 1) + "</td><td class='pv' style='color:var(--ok)'>" + esc(QS[i][1]) + "</td>"
+      + "<td>" + esc(ans) + "</td>";
+    if(i === 8) tr.className = "lit";
+    kb.appendChild(tr);
+  });
+
+  var cb = document.querySelector("#ctbl tbody"), un = 0;
+  CTL.forEach(function(c){
+    var a = c[2], p = provable(a), dots = "", missing = [];
+    a.forEach(function(v, i){
+      dots += "<span class='dot " + (v ? "d1" : "d0") + "' title='Q" + (i + 1) + "'></span>";
+      if(!v) missing.push("Q" + (i + 1) + " " + QS[i][1]);
+    });
+    if(!p) un++;
+    var tr = document.createElement("tr");
+    tr.className = "ctl";
+    tr.setAttribute("tabindex","0");
+    tr.innerHTML = "<td class='h'>" + esc(c[0]) + "</td><td>" + esc(c[1]) + "</td><td>" + dots + "</td>"
+      + "<td class='pv'>" + (p ? "<span class='ok'>provable</span>" : "<span class='cr'>UNPROVABLE</span>") + "</td>";
+    cb.appendChild(tr);
+    var dt = document.createElement("tr");
+    dt.className = "det";
+    var body = missing.length
+      ? "<p><span class='dk'>unanswered</span><span class='miss'>" + esc(missing.join(" · ")) + "</span></p>"
+      : "<p><span class='dk'>unanswered</span><span class='ok'>none — all ten answered</span></p>";
+    if(!p){
+      body += "<p><span class='dk'>why unprovable</span>Question 9 needs all three of evidence location, logged events and an assurance method. "
+        + "This control has no " + esc(andList([!a[3] ? "recorded evidence location" : "", !a[7] ? "logged events" : "", !a[8] ? "assurance method" : ""]
+          .filter(Boolean))) + ".</p>";
+    }
+    dt.innerHTML = "<td colspan='4'><div class='dc'>" + body + "</div></td>";
+    cb.appendChild(dt);
+    function tog(){ dt.classList.toggle("open"); }
+    tr.addEventListener("click", tog);
+    tr.addEventListener("keydown", function(e){ if(e.key === "Enter" || e.key === " "){ e.preventDefault(); tog(); } });
+  });
+
+  document.getElementById("upv").textContent = un;
+  document.getElementById("upv2").textContent = un;
+}
+
+renderScn(); renderStg(); renderAnat();
+
+</script>
+</body>
+</html>
