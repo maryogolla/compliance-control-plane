@@ -1,4 +1,4 @@
-[# Operations Control Plane — a design exercise
+# Operations Control Plane — a design exercise
 
 **[Live demo](https://maryogolla.github.io/compliance-control-plane/)**
 
@@ -43,4 +43,3 @@ Mary Ogola · maryogolla040@gmail.com · [linkedin.com/in/mogola](https://linked
 
 *Illustrative data. Design exercise from public sources. Not legal advice. Not affiliated
 with or endorsed by any company referenced.*
-](https://github.com/maryogolla/compliance-control-plane)
